@@ -1,6 +1,8 @@
-# TLS automatique (Let's Encrypt), HTTP/3, compression
-app.licengo.fr {
+# TLS automatique (Let's Encrypt en production ; CA interne pour "localhost"), compression
+{$DOMAIN:localhost} {
 	encode zstd gzip
 	reverse_proxy web:3000
-	request_body { max_size 15MB }
+	request_body {
+		max_size 15MB
+	}
 }

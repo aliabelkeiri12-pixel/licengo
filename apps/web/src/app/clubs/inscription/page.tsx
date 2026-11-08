@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { AuthShell } from "@/components/auth-shell";
 import { prisma } from "@/server/db";

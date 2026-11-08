@@ -10,3 +10,4 @@ dist
 coverage
 *.tsbuildinfo
 storage-test
+.env.production

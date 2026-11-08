@@ -11,9 +11,25 @@ cp .env.production.example .env.production   # remplir les secrets (openssl rand
 docker compose up -d --build
 ```
 
+Remplir `DOMAIN` (ex. `app.licengo.fr`, enregistrement DNS A vers le serveur) : Caddy obtient alors le certificat Let's Encrypt automatiquement.
+
 `docker-compose.yml` lance : PostgreSQL 16, la migration de schéma (job unique), l'application (image non-root), **Caddy** (HTTPS Let's Encrypt automatique), un **cron** (échéances à 6 h 15, relances à 17 h 30) et les **sauvegardes chiffrées** nocturnes. Healthcheck : `GET /api/health`.
 
 Phase 2 (100+ clubs) : Scaleway Serverless Containers (autoscaling) + Managed PostgreSQL (haute disponibilité, sauvegardes PITR) + Object Storage (offre HDS pour les documents) + Secret Manager ; mêmes images Docker, aucun changement de code hormis le pilote de stockage S3.
+
+### Recette de la pile de production (validée)
+
+La pile complète a été construite et exécutée telle quelle (`DOMAIN=localhost`) :
+- image applicative **distroless non-root** de 88 Mo, construite sans gestionnaire de paquets ;
+- job de migration : les 2 migrations Prisma sont appliquées ;
+- application *healthy* ; HTTPS HTTP/2 via Caddy, redirection 308 de HTTP vers HTTPS, en-têtes HSTS et CSP présents ;
+- **scénario E2E complet (19 étapes) réussi sur `https://localhost`** ;
+- planificateur : `installments` et `reminders` répondent 200 ;
+- sauvegarde chiffrée GPG produite, **restauration testée** dans une base temporaire (mêmes volumes de données que la base de production) ;
+- documents illisibles sur le volume (AES-256-GCM).
+
+Démo : `docker compose run --rm migrate pnpm --filter @licengo/web db:seed`. Restauration : `gpg -d db-….dump.gpg > r.dump && pg_restore -d licengo r.dump`.
+Derrière un proxy d'entreprise qui intercepte TLS, ajouter `--secret id=ca,src=ca.pem` au `docker build` (le certificat n'est jamais copié dans l'image).
 
 ## 2. Stripe Connect
 

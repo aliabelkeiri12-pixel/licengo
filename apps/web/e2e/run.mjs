@@ -20,7 +20,8 @@ const browser = await chromium.launch();
 const errors = [];
 try {
   // ---------------- FAMILLE (iPhone) ----------------
-  const mobile = await browser.newContext({ ...devices["iPhone 13"], locale: "fr-FR" });
+  const tls = { ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === "1" }; // certificat local (Caddy) en recette
+  const mobile = await browser.newContext({ ...devices["iPhone 13"], locale: "fr-FR", ...tls });
   const page = await mobile.newPage();
   page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
   const email = `e2e.${Date.now()}@exemple.fr`;
@@ -125,7 +126,7 @@ try {
   await mobile.close();
 
   // ---------------- CLUB (desktop) ----------------
-  const desk = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "fr-FR" });
+  const desk = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "fr-FR", ...tls });
   const club = await desk.newPage();
   club.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
   const login = async (p, mail) => {

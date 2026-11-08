@@ -32,3 +32,10 @@ jobs:
           cp -r .next/static .next/standalone/apps/web/.next/ && cp -r public .next/standalone/apps/web/
           (DATABASE_URL=postgresql://licengo:licengo@localhost:5432/licengo_test STORAGE_DIR=/tmp/storage node .next/standalone/apps/web/server.js &) && sleep 5
           SHOTS_DIR=/tmp/shots node e2e/run.mjs
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --target runner -t licengo-web:ci .
+      - run: docker build --target migrate -t licengo-migrate:ci .

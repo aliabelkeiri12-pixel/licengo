@@ -11,16 +11,18 @@ services:
     healthcheck: { test: ["CMD-SHELL", "pg_isready -U licengo"], interval: 5s, retries: 10 }
 
   migrate:
+    image: licengo-migrate:prod
     build: { context: ., target: migrate }
-    environment: { DATABASE_URL: postgresql://licengo:${POSTGRES_PASSWORD}@db:5432/licengo }
+    environment: { DATABASE_URL: "postgresql://licengo:${POSTGRES_PASSWORD}@db:5432/licengo" }
     depends_on: { db: { condition: service_healthy } }
     restart: "no"
 
   web:
+    image: licengo-web:prod
     build: { context: ., target: runner }
     restart: unless-stopped
     env_file: .env.production
-    environment: { DATABASE_URL: postgresql://licengo:${POSTGRES_PASSWORD}@db:5432/licengo }
+    environment: { DATABASE_URL: "postgresql://licengo:${POSTGRES_PASSWORD}@db:5432/licengo" }
     volumes: [documents:/data/storage]
     ports: ["127.0.0.1:3000:3000"] # exposé via le reverse proxy TLS (Caddy) uniquement
     depends_on:
@@ -30,26 +32,24 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
     ports: ["80:80", "443:443"]
+    environment: { DOMAIN: "${DOMAIN:-localhost}" }
     volumes: ["./deploy/Caddyfile:/etc/caddy/Caddyfile:ro", "caddy_data:/data"]
     depends_on: [web]
 
   cron:
-    image: alpine:3.20
+    image: node:22-alpine
     restart: unless-stopped
-    env_file: .env.production
-    command: >
-      sh -c "apk add --no-cache curl >/dev/null &&
-      echo '15 6 * * * curl -fsS -X POST -H \"Authorization: Bearer $$CRON_SECRET\" http://web:3000/api/cron/installments' > /etc/crontabs/root &&
-      echo '30 17 * * * curl -fsS -X POST -H \"Authorization: Bearer $$CRON_SECRET\" http://web:3000/api/cron/reminders' >> /etc/crontabs/root &&
-      crond -f -l 8"
+    environment: { CRON_SECRET: "${CRON_SECRET:?définir CRON_SECRET}", APP_INTERNAL_URL: "http://web:3000" }
+    volumes: ["./deploy/scheduler.mjs:/scheduler.mjs:ro"]
+    command: ["node", "/scheduler.mjs"]
     depends_on: [web]
 
   backup:
-    image: postgres:16-alpine
+    image: postgres:16
     restart: unless-stopped
     environment: { PGPASSWORD: "${POSTGRES_PASSWORD}", BACKUP_PASSPHRASE: "${BACKUP_PASSPHRASE:?définir BACKUP_PASSPHRASE}" }
     volumes: ["./deploy/backup.sh:/backup.sh:ro", "backups:/backups", "documents:/data/storage:ro"]
-    entrypoint: ["sh", "-c", "apk add --no-cache gnupg >/dev/null && echo '0 2 * * * sh /backup.sh' > /etc/crontabs/root && crond -f -l 8"]
+    entrypoint: ["sh", "/backup.sh"]
     depends_on: [db]
 
 volumes: { pgdata: {}, documents: {}, backups: {}, caddy_data: {} }
