@@ -1,0 +1,14 @@
+{
+  "name": "licengo",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "pnpm --filter @licengo/web dev",
+    "build": "pnpm --filter @licengo/web build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "pnpm --filter @licengo/web db:migrate",
+    "db:seed": "pnpm --filter @licengo/web db:seed",
+    "e2e": "pnpm --filter @licengo/web e2e"
+  }
+}

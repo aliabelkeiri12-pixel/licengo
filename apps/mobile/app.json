@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "LICENGO",
+    "slug": "licengo",
+    "scheme": "licengo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "splash": { "backgroundColor": "#0B3D2E" },
+    "ios": {
+      "bundleIdentifier": "fr.licengo.app",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "LICENGO utilise l'appareil photo pour photographier les documents d'inscription (pièce d'identité, photo, certificat).",
+        "NSPhotoLibraryUsageDescription": "LICENGO accède à vos photos pour joindre un document à un dossier d'inscription.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "privacyManifests": { "NSPrivacyAccessedAPITypes": [] }
+    },
+    "android": {
+      "package": "fr.licengo.app",
+      "adaptiveIcon": { "backgroundColor": "#0B3D2E" },
+      "permissions": ["CAMERA", "POST_NOTIFICATIONS"],
+      "blockedPermissions": ["android.permission.RECORD_AUDIO", "android.permission.ACCESS_FINE_LOCATION"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      ["expo-image-picker", { "cameraPermission": "LICENGO utilise l'appareil photo pour photographier les documents d'inscription." }],
+      ["expo-notifications", { "color": "#0B3D2E" }]
+    ],
+    "experiments": { "typedRoutes": false },
+    "extra": { "apiUrl": "https://app.licengo.fr", "eas": { "projectId": "REMPLACER-PAR-ID-EAS" } }
+  }
+}

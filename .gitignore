@@ -1,0 +1,12 @@
+node_modules
+.next
+.env
+.env.local
+*.log
+apps/web/storage
+apps/web/test-results
+.expo
+dist
+coverage
+*.tsbuildinfo
+storage-test

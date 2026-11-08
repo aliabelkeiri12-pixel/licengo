@@ -1,0 +1,611 @@
+// LICENGO – modèle de données (PostgreSQL)
+// Montants en centimes (Int). Identifiants cuid. Suppression logique (deletedAt) pour l'auditabilité RGPD.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  FAMILY
+  CLUB_STAFF
+  ADMIN
+}
+
+enum StaffRole {
+  OWNER
+  SECRETARY
+  TREASURER
+  COACH
+}
+
+enum ClubStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum Gender {
+  M
+  F
+  MIXED
+}
+
+enum RegistrationStatus {
+  DRAFT
+  SUBMITTED
+  INCOMPLETE
+  TO_FIX
+  VALIDATED
+  REJECTED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  LATE
+  REFUNDED
+}
+
+enum DocumentType {
+  PHOTO
+  ID_DOCUMENT
+  MEDICAL_CERTIFICATE
+  HEALTH_QUESTIONNAIRE
+  PARENTAL_AUTHORIZATION
+  PROOF_OF_ADDRESS
+  IMAGE_RIGHTS
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum SignatureType {
+  PARENTAL_AUTHORIZATION
+  IMAGE_RIGHTS
+  CLUB_RULES
+  HEALTH_QUESTIONNAIRE
+}
+
+enum PaymentKind {
+  LICENSE
+  SHOP
+}
+
+enum PaymentPlanStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum InstallmentStatus {
+  SCHEDULED
+  PROCESSING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PREPARING
+  SHIPPED
+  READY_FOR_PICKUP
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum ProductCategory {
+  MAILLOT
+  SHORT
+  CHAUSSETTES
+  SURVETEMENT
+  VESTE
+  PARKA
+  SAC
+  BONNET
+  GANTS
+  AUTRE
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String
+  firstName       String
+  lastName        String
+  phone           String?
+  role            Role      @default(FAMILY)
+  familyId        String?
+  family          Family?   @relation(fields: [familyId], references: [id])
+  termsAcceptedAt DateTime?
+  marketingOptIn  Boolean   @default(false)
+  failedLogins    Int       @default(0)
+  lockedUntil     DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  sessions      Session[]
+  staff         ClubStaff[]
+  notifications Notification[]
+  pushTokens    PushToken[]
+  cartItems     CartItem[]
+  orders        ShopOrder[]
+  signatures    Signature[]
+  auditLogs     AuditLog[]
+}
+
+model Session {
+  id        String   @id // SHA-256 of the opaque token, the token itself is never stored
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  userAgent String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Family {
+  id         String   @id @default(cuid())
+  name       String
+  address    String?
+  postalCode String?
+  city       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  guardians User[]
+  children  Child[]
+  documents Document[]
+}
+
+/// A licensee (child or adult). Personal data of minors: strictly minimised.
+model Child {
+  id          String    @id @default(cuid())
+  familyId    String
+  family      Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  firstName   String
+  lastName    String
+  birthDate   DateTime  @db.Date
+  gender      Gender
+  birthPlace  String?
+  nationality String?
+  isSelf      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  registrations Registration[]
+  documents     Document[]
+
+  @@index([familyId])
+}
+
+model Sport {
+  id         String  @id @default(cuid())
+  slug       String  @unique
+  name       String
+  federation String
+  emoji      String  @default("🏅")
+  active     Boolean @default(false)
+  /// Sport-specific registration rules (see @licengo/core SportRules)
+  rules      Json
+  clubs      Club[]
+}
+
+model Plan {
+  id                String @id @default(cuid())
+  code              String @unique
+  name              String
+  monthlyPriceCents Int
+  /// LICENGO fee added to each licence paid by families
+  licenseFeeCents   Int    @default(499)
+  /// LICENGO commission on shop sales, in basis points (500 = 5 %)
+  shopCommissionBps Int    @default(500)
+  maxLicensees      Int?
+  clubs             Club[]
+}
+
+model Club {
+  id                    String     @id @default(cuid())
+  name                  String
+  slug                  String     @unique
+  sportId               String
+  sport                 Sport      @relation(fields: [sportId], references: [id])
+  federationNumber      String?
+  description           String?
+  address               String?
+  postalCode            String
+  city                  String
+  lat                   Float
+  lng                   Float
+  email                 String?
+  phone                 String?
+  primaryColor          String     @default("#0B3D2E")
+  logoUrl               String?
+  status                ClubStatus @default(PENDING)
+  planId                String?
+  plan                  Plan?      @relation(fields: [planId], references: [id])
+  subscriptionStatus    String     @default("trialing")
+  stripeAccountId       String?    @unique
+  stripeChargesEnabled  Boolean    @default(false)
+  reminderEveryDays     Int        @default(5)
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  staff         ClubStaff[]
+  categories    Category[]
+  registrations Registration[]
+  products      Product[]
+  suppliers     Supplier[]
+  orders        ShopOrder[]
+  payments      Payment[]
+
+  @@index([lat, lng])
+  @@index([postalCode])
+  @@index([city])
+}
+
+model ClubStaff {
+  id     String    @id @default(cuid())
+  userId String
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clubId String
+  club   Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  role   StaffRole @default(SECRETARY)
+
+  @@unique([userId, clubId])
+}
+
+model Category {
+  id              String   @id @default(cuid())
+  clubId          String
+  club            Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  season          String // "2026-2027"
+  name            String
+  birthYearMin    Int
+  birthYearMax    Int
+  gender          Gender   @default(MIXED)
+  priceCents      Int
+  capacity        Int?
+  maxInstallments Int      @default(4)
+  open            Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  registrations Registration[]
+
+  @@index([clubId, season])
+}
+
+model Registration {
+  id               String             @id @default(cuid())
+  childId          String
+  child            Child              @relation(fields: [childId], references: [id])
+  clubId           String
+  club             Club               @relation(fields: [clubId], references: [id])
+  categoryId       String
+  category         Category           @relation(fields: [categoryId], references: [id])
+  season           String
+  status           RegistrationStatus @default(DRAFT)
+  paymentStatus    PaymentStatus      @default(UNPAID)
+  healthAnswer     String? // ALL_NO | SOME_YES
+  imageRightsOk    Boolean?
+  licenseFeeCents  Int
+  platformFeeCents Int
+  decisionReason   String?
+  missingSummary   String[]           @default([])
+  progress         Int                @default(0)
+  federationLicenseNumber String?
+  renewalOfId      String?
+  submittedAt      DateTime?
+  validatedAt      DateTime?
+  lastReminderAt   DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  documents  Document[]
+  signatures Signature[]
+  payments   Payment[]
+  events     RegistrationEvent[]
+
+  @@unique([childId, clubId, season])
+  @@index([clubId, status])
+}
+
+/// Full history of a registration file (who did what, when, why)
+model RegistrationEvent {
+  id             String       @id @default(cuid())
+  registrationId String
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  actorId        String?
+  type           String
+  message        String
+  createdAt      DateTime     @default(now())
+
+  @@index([registrationId])
+}
+
+model Document {
+  id             String         @id @default(cuid())
+  familyId       String
+  family         Family         @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  childId        String?
+  child          Child?         @relation(fields: [childId], references: [id])
+  registrationId String?
+  registration   Registration?  @relation(fields: [registrationId], references: [id])
+  type           DocumentType
+  status         DocumentStatus @default(PENDING)
+  rejectReason   String?
+  /// Key in the encrypted object storage – never a public URL
+  storageKey     String
+  mimeType       String
+  size           Int
+  sha256         String
+  originalName   String
+  sensitive      Boolean        @default(false)
+  issuedAt       DateTime?
+  expiresAt      DateTime?
+  uploadedById   String
+  reviewedById   String?
+  reviewedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  deletedAt      DateTime?
+
+  @@index([childId, type])
+  @@index([registrationId])
+}
+
+model Signature {
+  id             String        @id @default(cuid())
+  registrationId String
+  registration   Registration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  type           SignatureType
+  signerId       String
+  signer         User          @relation(fields: [signerId], references: [id])
+  signerName     String
+  /// SHA-256 of the signed text + identity + timestamp (proof of integrity)
+  contentHash    String
+  imageKey       String? // handwritten signature image, encrypted storage
+  accepted       Boolean       @default(true)
+  ip             String?
+  userAgent      String?
+  signedAt       DateTime      @default(now())
+
+  @@unique([registrationId, type])
+}
+
+model Payment {
+  id                String            @id @default(cuid())
+  kind              PaymentKind
+  registrationId    String?
+  registration      Registration?     @relation(fields: [registrationId], references: [id])
+  orderId           String?           @unique
+  order             ShopOrder?        @relation(fields: [orderId], references: [id])
+  clubId            String
+  club              Club              @relation(fields: [clubId], references: [id])
+  payerId           String
+  totalCents        Int
+  clubAmountCents   Int
+  platformFeeCents  Int
+  installmentsCount Int               @default(1)
+  status            PaymentPlanStatus @default(PENDING)
+  provider          String // "stripe" | "mock"
+  providerCustomerId String?
+  providerPaymentMethodId String?
+  checkoutSessionId String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  installments Installment[]
+  refunds      Refund[]
+
+  @@index([clubId])
+  @@index([payerId])
+}
+
+model Installment {
+  id                String            @id @default(cuid())
+  paymentId         String
+  payment           Payment           @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  index             Int
+  dueDate           DateTime
+  amountCents       Int
+  clubAmountCents   Int
+  platformFeeCents  Int
+  status            InstallmentStatus @default(SCHEDULED)
+  attempts          Int               @default(0)
+  providerPaymentIntentId String?     @unique
+  failureReason     String?
+  paidAt            DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([paymentId, index])
+  @@index([status, dueDate])
+}
+
+model Refund {
+  id               String       @id @default(cuid())
+  paymentId        String
+  payment          Payment      @relation(fields: [paymentId], references: [id])
+  installmentId    String?
+  amountCents      Int
+  clubCents        Int
+  feeCents         Int
+  reason           String
+  status           RefundStatus @default(PENDING)
+  providerRefundId String?
+  createdById      String
+  createdAt        DateTime     @default(now())
+}
+
+model Supplier {
+  id       String    @id @default(cuid())
+  clubId   String?
+  club     Club?     @relation(fields: [clubId], references: [id])
+  name     String
+  email    String?
+  phone    String?
+  products Product[]
+}
+
+model Product {
+  id          String          @id @default(cuid())
+  clubId      String
+  club        Club            @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  supplierId  String?
+  supplier    Supplier?       @relation(fields: [supplierId], references: [id])
+  name        String
+  description String?
+  category    ProductCategory
+  priceCents  Int
+  costCents   Int?
+  imageUrl    String?
+  active      Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  variants    ProductVariant[]
+
+  @@index([clubId, active])
+}
+
+model ProductVariant {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size      String
+  sku       String   @unique
+  stock     Int      @default(0)
+  lowStockThreshold Int @default(3)
+  cartItems CartItem[]
+  orderItems ShopOrderItem[]
+
+  @@unique([productId, size])
+}
+
+model CartItem {
+  id        String         @id @default(cuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantity  Int
+  /// Optional: flocking with the licensee's name
+  personalization String?
+  createdAt DateTime       @default(now())
+
+  @@unique([userId, variantId])
+}
+
+model ShopOrder {
+  id               String      @id @default(cuid())
+  number           String      @unique
+  userId           String
+  user             User        @relation(fields: [userId], references: [id])
+  clubId           String
+  club             Club        @relation(fields: [clubId], references: [id])
+  status           OrderStatus @default(PENDING_PAYMENT)
+  subtotalCents    Int
+  platformFeeCents Int
+  clubAmountCents  Int
+  shippingMode     String      @default("PICKUP_AT_CLUB")
+  trackingNumber   String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  items            ShopOrderItem[]
+  payment          Payment?
+
+  @@index([clubId, status])
+}
+
+model ShopOrderItem {
+  id             String         @id @default(cuid())
+  orderId        String
+  order          ShopOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variantId      String
+  variant        ProductVariant @relation(fields: [variantId], references: [id])
+  productName    String
+  size           String
+  quantity       Int
+  unitPriceCents Int
+  personalization String?
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  data       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+}
+
+model WebhookEvent {
+  id          String   @id // provider event id → idempotency
+  type        String
+  processedAt DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String    @id // SHA-256 of the token sent by email
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
