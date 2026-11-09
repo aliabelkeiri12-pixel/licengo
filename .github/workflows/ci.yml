@@ -26,7 +26,8 @@ jobs:
       - run: pnpm --filter @licengo/web build
       - name: E2E
         run: |
-          cd apps/web && npx playwright install --with-deps chromium && npm i --no-save playwright
+          npm i -g playwright@1.65.0 && playwright install --with-deps chromium
+          export NODE_PATH=$(npm root -g) && cd apps/web
           DATABASE_URL=postgresql://licengo:licengo@localhost:5432/licengo_test npx prisma migrate deploy
           DATABASE_URL=postgresql://licengo:licengo@localhost:5432/licengo_test pnpm db:seed
           cp -r .next/static .next/standalone/apps/web/.next/ && cp -r public .next/standalone/apps/web/
