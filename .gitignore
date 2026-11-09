@@ -11,3 +11,5 @@ coverage
 *.tsbuildinfo
 storage-test
 .env.production
+licengo.bundle
+licengo-source.zip
