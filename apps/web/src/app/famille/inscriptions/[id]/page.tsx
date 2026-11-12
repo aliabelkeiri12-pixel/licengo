@@ -74,6 +74,13 @@ export default async function RegistrationPage({ params, searchParams }: { param
       {r.status === "VALIDATED" && <div className="mb-4"><Alert tone="success">🎉 Inscription validée par le club. {r.federationLicenseNumber ? `N° de licence : ${r.federationLicenseNumber}` : "Le numéro de licence fédérale apparaîtra ici dès son enregistrement."}</Alert></div>}
 
       <div className="mb-6"><div className="mb-1 flex justify-between text-sm"><span className="font-semibold">Dossier complété</span><span className="font-bold text-pitch-700">{c.progress}%</span></div><Progress value={c.progress} /></div>
+      {r.status === "CANCELLED" && (
+        <div className="mb-4 rounded-2xl border-2 border-line bg-white p-4">
+          <p className="font-bold">Cette inscription a été annulée</p>
+          <p className="mt-1 text-sm text-muted">Pour inscrire {r.child.firstName} à nouveau, choisissez un club depuis l'onglet « Clubs ».</p>
+          <a href={`/clubs?enfant=${r.childId}`} className="mt-3 inline-flex rounded-xl bg-pitch-800 px-4 py-2 text-sm font-semibold text-white">Trouver un club</a>
+        </div>
+      )}
       {r.status === "REJECTED" && (
         <div className="mb-4 rounded-2xl border-2 border-danger bg-red-50 p-4">
           <p className="font-bold text-danger">L'inscription a été refusée par le club</p>
