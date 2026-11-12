@@ -1,52 +1,35 @@
-# Déploiement en un clic : https://dashboard.render.com → New → Blueprint → choisir ce dépôt.
+# Démo GRATUITE (offre Free de Render) : https://dashboard.render.com → New → Blueprint → ce dépôt.
+# Limites du gratuit : le site s'endort après 15 min sans visite (≈1 min pour se réveiller),
+# base gratuite valable 30 jours, documents envoyés non conservés après un redémarrage,
+# pas de tâche planifiée. Pour la version officielle payante : docs/render-production.yaml.
 databases:
-  - name: licengo-db
+  - name: licengo-demo-db
     region: frankfurt
-    plan: basic-256mb
+    plan: free
     databaseName: licengo
     user: licengo
 
 services:
   - type: web
-    name: licengo
+    name: licengo-demo
     runtime: docker
     region: frankfurt
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile.render
     dockerContext: .
     healthCheckPath: /api/health
-    disk:
-      name: documents
-      mountPath: /data/storage
-      sizeGB: 5
     envVars:
       - key: DATABASE_URL
-        fromDatabase: { name: licengo-db, property: connectionString }
+        fromDatabase: { name: licengo-demo-db, property: connectionString }
       - key: DOCUMENT_ENCRYPTION_KEY
         generateValue: true
       - key: CRON_SECRET
         generateValue: true
+      - key: STORAGE_DIR
+        value: /tmp/storage
+      - key: DEMO_DATA
+        value: "1"
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      - key: DEMO_DATA
-        value: "1"
-      - key: STRIPE_SECRET_KEY
-        sync: false
-      - key: STRIPE_WEBHOOK_SECRET
-        sync: false
-
-  - type: cron
-    name: licengo-echeances
-    runtime: docker
-    region: frankfurt
-    plan: starter
-    schedule: "15 5 * * *"
-    dockerfilePath: ./deploy/Dockerfile.cron
-    dockerContext: .
-    envVars:
-      - key: CRON_SECRET
-        fromService: { type: web, name: licengo, envVarKey: CRON_SECRET }
-      - key: APP_INTERNAL_URL
-        fromService: { type: web, name: licengo, property: hostport }
