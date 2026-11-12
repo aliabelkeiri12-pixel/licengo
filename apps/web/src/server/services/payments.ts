@@ -7,7 +7,7 @@ import { notify, notifyClubStaff } from "../notify";
 import { audit } from "../audit";
 import { env } from "../env";
 import { sendPaymentReceipt } from "../receipt";
-import { issueInvoices } from "../invoices";
+import { issueInvoice } from "../invoices";
 import type { SessionUser } from "../auth";
 import { assertFamilyAccess, computeCompleteness } from "./registrations";
 
@@ -94,7 +94,7 @@ export async function markInstallmentPaid(installmentId: string, info: { intentI
   const p = await refreshAggregates(inst.paymentId);
   await notify(p.payerId, { type: "PAYMENT_SUCCEEDED", title: "Paiement confirmé", body: `${formatEUR(inst.amountCents)} – échéance ${inst.index}/${p.installmentsCount}`, link: "/famille/paiements" });
   await audit(null, "installment.paid", "Installment", inst.id, { amount: inst.amountCents });
-  await issueInvoices(inst.id).catch((e) => console.error("invoice failed", e));
+  await issueInvoice(inst.paymentId).catch((e) => console.error("invoice failed", e));
   await sendPaymentReceipt(inst.id); // receipt + PDF invoices e-mailed to the payer account (never blocks the payment)
   return inst;
 }

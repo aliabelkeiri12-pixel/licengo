@@ -66,7 +66,9 @@ export async function recompute(registrationId: string, opts: { forceStatus?: bo
   const c = await computeCompleteness(r);
   const data: Prisma.RegistrationUpdateInput = { missingSummary: c.summary, progress: c.progress };
   const auto: RegistrationStatus[] = ["SUBMITTED", "INCOMPLETE"];
-  if (opts.forceStatus || auto.includes(r.status)) {
+  // Simplicity: a file that becomes complete is sent to the club automatically (no "submit" button to find)
+  const autoSubmit = c.state === "COMPLETE" && (r.status === "DRAFT" || r.status === "TO_FIX");
+  if (opts.forceStatus || auto.includes(r.status) || autoSubmit) {
     const next = stateToStatus[c.state];
     if (next !== r.status) {
       data.status = next;
@@ -74,6 +76,10 @@ export async function recompute(registrationId: string, opts: { forceStatus?: bo
     }
   }
   await prisma.registration.update({ where: { id: r.id }, data });
+  if (data.status === "SUBMITTED") {
+    await event(r.id, null, "SUBMITTED", "Dossier complet transmis automatiquement au club");
+    await notifyClubStaff(r.clubId, { type: "REGISTRATION_SUBMITTED", title: "Nouveau dossier complet", body: `${r.child.firstName} ${r.child.lastName} – ${r.category.name}`, link: `/club/dossiers/${r.id}` });
+  }
   return { ...c, status: (data.status as RegistrationStatus) ?? r.status };
 }
 
@@ -81,7 +87,16 @@ async function event(registrationId: string, actorId: string | null, type: strin
   await prisma.registrationEvent.create({ data: { registrationId, actorId, type, message } });
 }
 
-export async function createRegistration(user: SessionUser, childId: string, categoryId: string) {
+export type Extra = { id: string; label: string; amountCents: number };
+export const extrasOf = (json: unknown): Extra[] => (Array.isArray(json) ? (json as Extra[]) : []);
+
+/** Mandatory supplements of the club + the optional ones chosen (ids validated against the club). */
+async function selectExtras(clubId: string, optionalIds: string[]): Promise<Extra[]> {
+  const fees = await prisma.clubFee.findMany({ where: { clubId, active: true }, orderBy: { createdAt: "asc" } });
+  return fees.filter((f) => f.mandatory || optionalIds.includes(f.id)).map((f) => ({ id: f.id, label: f.label, amountCents: f.amountCents }));
+}
+
+export async function createRegistration(user: SessionUser, childId: string, categoryId: string, optionalExtraIds: string[] = []) {
   const child = await prisma.child.findFirst({ where: { id: childId, familyId: user.familyId ?? "-", deletedAt: null } });
   if (!child) throw notFound("Enfant");
   const category = await prisma.category.findUnique({ where: { id: categoryId }, include: { club: { include: { plan: true } }, _count: { select: { registrations: { where: { status: { notIn: ["REJECTED", "CANCELLED"] } } } } } } });
@@ -91,10 +106,12 @@ export async function createRegistration(user: SessionUser, childId: string, cat
   const existing = await prisma.registration.findUnique({ where: { childId_clubId_season: { childId, clubId: category.clubId, season: category.season } } });
   if (existing) return existing;
   const previous = await prisma.registration.findFirst({ where: { childId, clubId: category.clubId, status: "VALIDATED" }, orderBy: { createdAt: "desc" } });
+  const extras = await selectExtras(category.clubId, optionalExtraIds);
   const reg = await prisma.registration.create({
     data: {
       childId, clubId: category.clubId, categoryId, season: category.season,
-      licenseFeeCents: category.priceCents,
+      extras,
+      licenseFeeCents: category.priceCents + extras.reduce((t, e) => t + e.amountCents, 0),
       platformFeeCents: category.club.plan?.licenseFeeCents ?? 499,
       renewalOfId: previous?.id,
     },
@@ -105,13 +122,26 @@ export async function createRegistration(user: SessionUser, childId: string, cat
   return reg;
 }
 
+/** Secretary adds / removes optional supplements (e.g. transfer fee) on a file, before any payment. */
+export async function setRegistrationExtras(user: SessionUser, registrationId: string, optionalExtraIds: string[]) {
+  const r = await assertClubAccess(user, registrationId);
+  if (r.paymentStatus !== "UNPAID" || r.payments.some((p) => !["CANCELLED", "PENDING"].includes(p.status)))
+    throw new AppError("Un paiement a déjà été effectué : les suppléments ne peuvent plus être modifiés");
+  const extras = await selectExtras(r.clubId, optionalExtraIds);
+  const total = r.category.priceCents + extras.reduce((t, e) => t + e.amountCents, 0);
+  await prisma.registration.update({ where: { id: r.id }, data: { extras, licenseFeeCents: total } });
+  await event(r.id, user.id, "EXTRAS", extras.length ? `Suppléments : ${extras.map((e) => `${e.label} (${(e.amountCents / 100).toFixed(2).replace(".", ",")} €)`).join(", ")}` : "Aucun supplément");
+  await notifyFamily(r.child.familyId, { type: "EXTRAS_UPDATED", title: `${r.club.name} : tarif mis à jour`, body: `Licence de ${r.child.firstName} : ${(total / 100).toFixed(2).replace(".", ",")} €${extras.length ? ` (dont ${extras.map((e) => e.label).join(", ")})` : ""}`, link: `/famille/inscriptions/${r.id}` });
+  await audit(user.id, "registration.extras", "Registration", r.id, { extras });
+  return total;
+}
+
 export async function submitRegistration(user: SessionUser, registrationId: string) {
   const r = await assertFamilyAccess(user, registrationId);
+  if (r.status === "SUBMITTED") return recompute(registrationId); // already sent automatically
   if (!["DRAFT", "INCOMPLETE", "TO_FIX"].includes(r.status)) throw new AppError("Ce dossier ne peut plus être modifié");
   const res = await recompute(registrationId, { forceStatus: true });
-  await event(r.id, user.id, "SUBMITTED", res.status === "SUBMITTED" ? "Dossier complet transmis au club" : `Dossier transmis incomplet (${res.summary.length} point(s))`);
-  if (res.status === "SUBMITTED")
-    await notifyClubStaff(r.clubId, { type: "REGISTRATION_SUBMITTED", title: "Nouveau dossier complet", body: `${r.child.firstName} ${r.child.lastName} – ${r.category.name}`, link: `/club/dossiers/${r.id}` });
+  if (res.status !== "SUBMITTED") await event(r.id, user.id, "SUBMITTED", `Dossier transmis incomplet (${res.summary.length} point(s))`);
   return res;
 }
 

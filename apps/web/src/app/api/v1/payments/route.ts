@@ -9,7 +9,7 @@ export const GET = api(async () => {
   const u = await requireUser("FAMILY");
   const payments = await prisma.payment.findMany({
     where: { payerId: u.id, status: { notIn: ["PENDING", "CANCELLED"] } },
-    include: { installments: { orderBy: { index: "asc" } }, club: true, registration: { include: { child: true } }, order: true, invoices: { orderBy: { issuedAt: "asc" } } },
+    include: { installments: { orderBy: { index: "asc" } }, club: true, registration: { include: { child: true } }, order: true, invoice: true },
     orderBy: { createdAt: "desc" },
   });
   return payments.map((p) => ({
@@ -22,6 +22,6 @@ export const GET = api(async () => {
     platformFeeCents: p.platformFeeCents,
     installmentsCount: p.installmentsCount,
     installments: p.installments.map((i) => ({ id: i.id, index: i.index, dueDate: i.dueDate, amountCents: i.amountCents, status: i.status, paidAt: i.paidAt })),
-    invoices: p.invoices.map((i) => ({ id: i.id, number: i.number, issuer: i.issuer, amountCents: i.amountCents, issuedAt: i.issuedAt, url: env.appUrl + signInvoiceLink(i.id) })),
+    invoice: p.invoice ? { id: p.invoice.id, number: p.invoice.number, url: env.appUrl + signInvoiceLink(p.invoice.id) } : null,
   }));
 });

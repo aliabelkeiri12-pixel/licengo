@@ -65,7 +65,7 @@ export async function createRegistrationAction(_: ActionState, fd: FormData): Pr
   let id = "";
   const res = await safe(async () => {
     const u = await family();
-    id = (await createRegistration(u, str(fd, "childId"), str(fd, "categoryId"))).id;
+    id = (await createRegistration(u, str(fd, "childId"), str(fd, "categoryId"), fd.getAll("extras").map(String))).id;
   });
   if (res) return res;
   redirect(`/famille/inscriptions/${id}`);
@@ -235,4 +235,32 @@ export async function cancelOrderAction(fd: FormData) {
   const u = await requireUser();
   await cancelUnpaidOrder(u, str(fd, "orderId"));
   revalidatePath(`/commandes/${str(fd, "orderId")}`);
+}
+
+/** Step 2 in one go: health questionnaire answer + every required authorisation + image rights, one signature. */
+export async function signAllAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const u = await family();
+    const registrationId = str(fd, "registrationId");
+    const { assertFamilyAccess, computeCompleteness, getRegistration } = await import("@/server/services/registrations");
+    await assertFamilyAccess(u, registrationId);
+    const health = str(fd, "healthAnswer");
+    if (health) await setHealthAnswer(u, registrationId, z.enum(["ALL_NO", "SOME_YES"]).parse(health));
+    if (fd.get("readAll") !== "on") throw new AppError("Cochez la case pour confirmer avoir lu les documents");
+    const imageRights = str(fd, "imageRights");
+    if (!["yes", "no"].includes(imageRights)) throw new AppError("Indiquez si vous acceptez le droit à l'image");
+    const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(str(fd, "signature"));
+    if (!m) throw new AppError("Merci de signer dans le cadre");
+    const buf = Buffer.from(m[1], "base64");
+    if (buf.length > 400_000 || sniffMime(buf) !== "image/png") throw new AppError("Signature invalide");
+    const imageKey = (await storeEncrypted(`families/${u.familyId}/signatures`, buf)).key;
+    const info = await clientInfo();
+    const base = { signerName: str(fd, "signerName"), imageKey, ip: info.ip, userAgent: info.userAgent.slice(0, 250) };
+    // requirements are always computed server-side, never trusted from the browser
+    const c = await computeCompleteness(await getRegistration(registrationId));
+    for (const t of c.requiredSignatures) await signDocument(u, registrationId, t as SignatureType, { ...base, accepted: true });
+    await signDocument(u, registrationId, "IMAGE_RIGHTS", { ...base, accepted: imageRights === "yes" });
+    revalidatePath(`/famille/inscriptions/${registrationId}`);
+    return { ok: "Signature enregistrée ✔" };
+  });
 }

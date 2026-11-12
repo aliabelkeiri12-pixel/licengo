@@ -19,7 +19,9 @@ Captures générées automatiquement par le scénario E2E (`apps/web/e2e/run.mjs
 | Commandes | Suivi de commande | `ecrans/12-commande.png` |
 | Paiement | Email de reçu envoyé au payeur | `ecrans/16-email-recu.png` |
 | Paiement | Espace « Mes paiements » (échéances, factures) | `ecrans/17-mes-paiements.png` |
-| Paiement | Factures PDF club et LICENGO | `ecrans/18-factures-pdf.png` |
+| Paiement | Facture unique : licence, suppléments, frais de service et échéancier | `ecrans/18-facture-unique.png` |
+| Inscription | Choix des suppléments (mutation, assurance…) | `ecrans/19-inscription-supplements.png` |
+| Inscription | Dossier en 3 étapes (documents, santé et signature, paiement) | `ecrans/20-dossier-3-etapes.png` |
 | Tableau de bord famille | Accueil famille | `ecrans/13-accueil-famille.png` |
 | Notifications | Centre de notifications | `ecrans/14-notifications.png` |
 | Club | Tableau de bord | `ecrans/20-club-tableau-de-bord.png` |

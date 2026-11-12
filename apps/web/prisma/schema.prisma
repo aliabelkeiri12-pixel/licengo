@@ -267,6 +267,7 @@ model Club {
   suppliers     Supplier[]
   orders        ShopOrder[]
   payments      Payment[]
+  fees          ClubFee[]
 
   @@index([lat, lng])
   @@index([postalCode])
@@ -317,7 +318,10 @@ model Registration {
   paymentStatus    PaymentStatus      @default(UNPAID)
   healthAnswer     String? // ALL_NO | SOME_YES
   imageRightsOk    Boolean?
+  /// category price + selected supplements (amount received by the club)
   licenseFeeCents  Int
+  /// supplements added to the licence price: [{ id, label, amountCents }]
+  extras           Json               @default("[]")
   platformFeeCents Int
   decisionReason   String?
   missingSummary   String[]           @default([])
@@ -428,7 +432,7 @@ model Payment {
 
   installments Installment[]
   refunds      Refund[]
-  invoices     Invoice[]
+  invoice      Invoice?
 
   @@index([clubId])
   @@index([payerId])
@@ -615,27 +619,19 @@ model PasswordResetToken {
   @@index([userId])
 }
 
-enum InvoiceIssuer {
-  CLUB
-  PLATFORM
-}
-
-/// One invoice per paid installment and issuer: the club invoices the membership fee,
-/// LICENGO invoices its service fee (VAT included).
+/// One invoice per payment (licence or shop order): licence amount, installment schedule and
+/// LICENGO service fee on the same document. Issued at the first payment, kept up to date afterwards.
 model Invoice {
-  id            String        @id @default(cuid())
-  number        String        @unique
-  issuer        InvoiceIssuer
-  paymentId     String
-  payment       Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  installmentId String
-  clubId        String
-  payerId       String
-  amountCents   Int // total incl. VAT
-  vatCents      Int           @default(0)
-  issuedAt      DateTime      @default(now())
+  id          String   @id @default(cuid())
+  number      String   @unique
+  paymentId   String   @unique
+  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  clubId      String
+  payerId     String
+  amountCents Int // total of the payment, incl. VAT
+  vatCents    Int      @default(0) // VAT included in the LICENGO service fee
+  issuedAt    DateTime @default(now())
 
-  @@unique([installmentId, issuer])
   @@index([payerId])
 }
 
@@ -643,4 +639,20 @@ model Invoice {
 model InvoiceCounter {
   key   String @id // "CLUB:<clubId>:2026" | "PLATFORM:2026"
   value Int    @default(0)
+}
+
+/// Supplements added by a club to its licence prices (transfer fee, extra insurance, kit…).
+model ClubFee {
+  id          String   @id @default(cuid())
+  clubId      String
+  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  label       String
+  description String?
+  amountCents Int
+  /// true: added to every licence; false: chosen by the family (or added by the secretary)
+  mandatory   Boolean  @default(false)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([clubId])
 }

@@ -2,6 +2,7 @@ import { formatEUR } from "@licengo/core";
 import { prisma } from "./db";
 import { sendMail, appLink, type MailAttachment } from "./mail";
 import { renderInvoicePdf } from "./invoices";
+import { extrasOf } from "./services/registrations";
 
 export interface ReceiptData {
   number: string;
@@ -41,7 +42,7 @@ export function buildReceiptEmail(r: ReceiptData) {
     ...(r.installment?.remaining.length ? ["", "Prochaines échéances :", ...r.installment.remaining.map((x) => `  ${day(x.dueDate)} : ${formatEUR(x.amountCents)}`)] : []),
     "",
     r.simulated ? "⚠ Paiement de démonstration : aucune somme n'a été réellement débitée." : "Paiement par carte bancaire sécurisé (Stripe).",
-    `Vos factures sont jointes à cet email et disponibles dans « Mes paiements » : ${r.link}`,
+    `Votre facture (à jour de l'échéancier) est jointe à cet email et disponible dans « Mes paiements » : ${r.link}`,
     "",
     "LICENGO",
   ].join("\n");
@@ -102,7 +103,7 @@ export async function sendPaymentReceipt(installmentId: string): Promise<boolean
       const r = p.registration;
       title = `Licence ${r.season} – ${r.child.firstName} ${r.child.lastName} – ${r.category.name}`;
       lines = [
-        { label: p.installmentsCount > 1 ? `Cotisation licence (part de l'échéance ${inst.index})` : "Cotisation licence", amountCents: inst.clubAmountCents },
+        { label: p.installmentsCount > 1 ? `Cotisation licence (part de l'échéance ${inst.index})` : `Cotisation licence${extrasOf(r.extras).length ? ` (dont ${extrasOf(r.extras).map((e) => e.label.toLowerCase()).join(", ")})` : ""}`, amountCents: inst.clubAmountCents },
         ...(inst.platformFeeCents ? [{ label: "Frais de service LICENGO", amountCents: inst.platformFeeCents }] : []),
       ];
       link = appLink(`/famille/inscriptions/${r.id}`);
@@ -125,9 +126,8 @@ export async function sendPaymentReceipt(installmentId: string): Promise<boolean
       simulated: p.provider === "mock",
       link,
     });
-    const invoices = await prisma.invoice.findMany({ where: { installmentId: inst.id }, orderBy: { issuer: "asc" } });
-    const attachments: MailAttachment[] = [];
-    for (const i of invoices) attachments.push({ name: `facture-${i.number}.pdf`, content: (await renderInvoicePdf(i.id)).pdf });
+    const invoice = await prisma.invoice.findUnique({ where: { paymentId: p.id } });
+    const attachments: MailAttachment[] = invoice ? [{ name: `facture-${invoice.number}.pdf`, content: (await renderInvoicePdf(invoice.id)).pdf }] : [];
     return await sendMail(payer.email, mail.subject, mail.text, mail.html, attachments);
   } catch (e) {
     console.error("receipt failed", e);

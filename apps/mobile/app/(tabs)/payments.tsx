@@ -10,7 +10,7 @@ import { colors } from "@/theme";
 type Payment = {
   id: string; title: string; club: string; status: string; totalCents: number; clubAmountCents: number; platformFeeCents: number; installmentsCount: number;
   installments: { id: string; index: number; dueDate: string; amountCents: number; status: string }[];
-  invoices: { id: string; number: string; issuer: "CLUB" | "PLATFORM"; amountCents: number; url: string }[];
+  invoice: { id: string; number: string; url: string } | null;
 };
 const status: Record<string, [string, string]> = { ACTIVE: ["En cours", "#1F5FBF"], COMPLETED: ["Soldé", colors.pitch600], FAILED: ["Impayé", colors.danger], REFUNDED: ["Remboursé", colors.warning] };
 const inst: Record<string, string> = { PAID: "✓ payée", SCHEDULED: "programmée", FAILED: "⚠ échec", CANCELLED: "annulée", REFUNDED: "remboursée", PROCESSING: "en cours" };
@@ -44,13 +44,11 @@ export default function Payments() {
               <Text style={{ fontWeight: "700", color: i.status === "FAILED" ? colors.danger : colors.ink }}>{formatEUR(i.amountCents)} {inst[i.status] ?? ""}</Text>
             </View>
           ))}
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-            {p.invoices.map((f) => (
-              <Pressable key={f.id} onPress={() => WebBrowser.openBrowserAsync(f.url)} style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 }}>
-                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.pitch700 }}>📄 {f.issuer === "CLUB" ? "Facture club" : "Facture LICENGO"} {f.number}</Text>
-              </Pressable>
-            ))}
-          </View>
+          {p.invoice ? (
+            <Pressable onPress={() => WebBrowser.openBrowserAsync(p.invoice!.url)} style={{ marginTop: 12, backgroundColor: colors.pitch800, borderRadius: 12, paddingVertical: 12, alignItems: "center" }}>
+              <Text style={{ color: colors.white, fontWeight: "700" }}>📄 Télécharger la facture</Text>
+            </Pressable>
+          ) : null}
         </Card>
       )}
     />

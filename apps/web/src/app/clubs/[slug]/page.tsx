@@ -17,6 +17,7 @@ export default async function ClubPage({ params, searchParams }: { params: Promi
   const user = await getCurrentUser();
   const children = user?.familyId ? await prisma.child.findMany({ where: { familyId: user.familyId, deletedAt: null }, orderBy: { birthDate: "asc" } }) : [];
   const fee = club.plan?.licenseFeeCents ?? 499;
+  const extras = await prisma.clubFee.findMany({ where: { clubId: club.id, active: true }, orderBy: { createdAt: "asc" } });
   return (
     <main className="min-h-dvh pb-16">
       <div className="text-white" style={{ background: `linear-gradient(135deg, ${club.primaryColor}, #04130D)` }}>
@@ -57,6 +58,7 @@ export default async function ClubPage({ params, searchParams }: { params: Promi
             ) : (
               <RegisterForm
                 feeCents={fee}
+                extras={extras.map((e) => ({ id: e.id, label: e.label, description: e.description, amountCents: e.amountCents, mandatory: e.mandatory }))}
                 defaultChild={enfant}
                 members={children.map((c) => ({ id: c.id, name: `${c.firstName} ${c.lastName}`, year: c.birthDate.getUTCFullYear(), gender: c.gender }))}
                 categories={club.categories.map((c) => ({ id: c.id, name: c.name, min: c.birthYearMin, max: c.birthYearMax, gender: c.gender, price: c.priceCents }))}

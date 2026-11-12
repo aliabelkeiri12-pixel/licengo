@@ -10,7 +10,7 @@ import type { StaffRole as SR } from "@prisma/client";
 import { AppError } from "@/server/errors";
 import { audit } from "@/server/audit";
 import { notifyFamily } from "@/server/notify";
-import { decide, assertClubAccess, currentSeason } from "@/server/services/registrations";
+import { decide, assertClubAccess, currentSeason, setRegistrationExtras } from "@/server/services/registrations";
 import { reviewDocument } from "@/server/services/documents";
 import { refundPayment } from "@/server/services/payments";
 import { updateOrderStatus, lowStockAlert } from "@/server/services/shop";
@@ -221,5 +221,32 @@ export async function addStaffAction(_: ActionState, fd: FormData): Promise<Acti
     await audit(user.id, "club.staff_add", "Club", clubId, { email: d.email, role: d.role });
     revalidatePath("/club/parametres");
     return { ok: "Membre ajouté à l'équipe" };
+  });
+}
+
+export async function saveClubFeeAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const { user, clubId } = await clubWriter("SECRETARY", "TREASURER");
+    const d = z.object({ label: z.string().trim().min(2, "Libellé requis").max(60), amount: z.coerce.number().min(0.5).max(1000), description: z.string().trim().max(200).optional() }).parse(Object.fromEntries(fd));
+    await prisma.clubFee.create({ data: { clubId, label: d.label, amountCents: toCents(d.amount), description: d.description || null, mandatory: str(fd, "mandatory") === "yes" } });
+    await audit(user.id, "club.fee_create", "Club", clubId, { label: d.label });
+    revalidatePath("/club/categories");
+    return { ok: "Supplément ajouté" };
+  });
+}
+
+export async function toggleClubFeeAction(fd: FormData) {
+  const { clubId } = await clubWriter("SECRETARY", "TREASURER");
+  const f = await prisma.clubFee.findFirst({ where: { id: str(fd, "feeId"), clubId } });
+  if (f) await prisma.clubFee.update({ where: { id: f.id }, data: { active: !f.active } });
+  revalidatePath("/club/categories");
+}
+
+export async function setExtrasAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const { user } = await clubWriter("SECRETARY", "TREASURER");
+    const total = await setRegistrationExtras(user, str(fd, "registrationId"), fd.getAll("extras").map(String));
+    revalidatePath(`/club/dossiers/${str(fd, "registrationId")}`);
+    return { ok: `Tarif mis à jour : ${(total / 100).toFixed(2).replace(".", ",")} €, la famille est prévenue` };
   });
 }

@@ -140,25 +140,25 @@ describe("parcours complet licence", () => {
     expect(receipts[0].text).toContain("Paiement de démonstration");
     expect(receipts[0].text).toContain("Prochaines échéances");
     expect(receipts[0].html).toContain("<b style=\"color:#0E1512\">FC Test</b>");
-    // invoices: club invoices the membership fee, LICENGO its service fee (VAT included), sequential numbers
-    const invs = await prisma.invoice.findMany({ where: { paymentId }, orderBy: { issuer: "asc" } });
-    expect(invs.map((i) => [i.issuer, i.amountCents, i.vatCents])).toEqual([["CLUB", 5000, 0], ["PLATFORM", 499, 83]]);
-    expect(invs[0].number).toMatch(/^FCTEST-\d{4}-00001$/);
-    expect(invs[1].number).toMatch(/^LG-\d{4}-00001$/);
-    expect(receipts[0].attachments?.map((a: { name: string }) => a.name)).toEqual([`facture-${invs[0].number}.pdf`, `facture-${invs[1].number}.pdf`]);
+    // one single invoice per licence: licence amount, schedule and service fee (VAT included)
+    const invs = await prisma.invoice.findMany({ where: { paymentId } });
+    expect(invs).toHaveLength(1);
+    expect(invs[0]).toMatchObject({ amountCents: 15499, vatCents: 83 });
+    expect(invs[0].number).toMatch(/^LG-\d{4}-00001$/);
+    expect((receipts[0] as { attachments?: { name: string }[] }).attachments?.map((a) => a.name)).toEqual([`facture-${invs[0].number}.pdf`]);
     const { renderInvoicePdf, canReadInvoice } = await import("@/server/invoices");
-    const { pdf } = await renderInvoicePdf(invs[1].id);
+    const { pdf } = await renderInvoicePdf(invs[0].id);
     expect(Buffer.from(pdf).subarray(0, 5).toString()).toBe("%PDF-");
-    expect(canReadInvoice(family as never, invs[1])).toBe(true);
+    expect(canReadInvoice(family as never, invs[0])).toBe(true);
     expect(canReadInvoice(staff as never, invs[0])).toBe(true);
-    expect(canReadInvoice(staff as never, invs[1])).toBe(false); // LICENGO invoice is private between family and LICENGO
+    const stranger = { ...family, id: "x", role: "FAMILY", staff: [] };
+    expect(canReadInvoice(stranger as never, invs[0])).toBe(false);
     expect((await prisma.registration.findUniqueOrThrow({ where: { id: regId } })).paymentStatus).toBe("PARTIAL");
     await expect(startLicensePayment(family as never, regId, 1)).rejects.toThrow();
     const far = new Date(Date.now() + 70 * 86400_000);
     const res = await runDueInstallments(far);
     expect(res).toMatchObject({ charged: 2, failed: 0 });
-    expect(await prisma.invoice.count({ where: { paymentId } })).toBe(4); // 2 + one club invoice per later installment
-    expect((await prisma.invoice.findMany({ where: { paymentId, issuer: "CLUB" }, orderBy: { number: "asc" } })).map((i) => i.number.slice(-5))).toEqual(["00001", "00002", "00003"]);
+    expect(await prisma.invoice.count({ where: { paymentId } })).toBe(1); // still one invoice, kept up to date
     expect(((globalThis as { __sentMails?: { subject: string }[] }).__sentMails ?? []).filter((m) => m.subject.startsWith("Votre reçu LICENGO")).length).toBe(3); // one receipt per installment
     expect((await prisma.registration.findUniqueOrThrow({ where: { id: regId } })).paymentStatus).toBe("PAID");
     expect((await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })).status).toBe("COMPLETED");
@@ -221,7 +221,11 @@ describe("impayés", () => {
   });
 
   it("relances automatiques des dossiers incomplets", async () => {
-    const { runReminders } = await import("@/server/services/registrations");
+    const { runReminders, createRegistration } = await import("@/server/services/registrations");
+    const fam = await prisma.family.findFirstOrThrow({ where: { guardians: { some: { id: family.id } } } });
+    const start = Number((await prisma.category.findUniqueOrThrow({ where: { id: u11Id } })).season.slice(0, 4));
+    const late = await prisma.child.create({ data: { familyId: fam.id, firstName: "Zoé", lastName: "Test", birthDate: new Date(Date.UTC(start - 9, 2, 1)), gender: "F" } });
+    await createRegistration(family as never, late.id, u11Id); // left incomplete
     await prisma.registration.updateMany({ where: { status: { in: ["DRAFT", "INCOMPLETE"] } }, data: { updatedAt: new Date(Date.now() - 10 * 86400_000) } });
     const r1 = await runReminders();
     expect(r1.sent).toBeGreaterThan(0);
@@ -261,5 +265,26 @@ describe("recherche de clubs", () => {
     expect(near.results.map((c) => c.slug)).toContain("fc-test");
     const far = await searchClubs({ lat: 48.85, lng: 2.35, radiusKm: 10 });
     expect(far.results).toHaveLength(0);
+  });
+});
+
+describe("suppléments au tarif (mutation…)", () => {
+  it("supplément choisi par la famille, puis modifié par le secrétariat avant paiement", async () => {
+    const { createRegistration, setRegistrationExtras } = await import("@/server/services/registrations");
+    const mutation = await prisma.clubFee.create({ data: { clubId, label: "Frais de mutation", amountCents: 3000 } });
+    const kit = await prisma.clubFee.create({ data: { clubId, label: "Pack équipement", amountCents: 4500, mandatory: true } });
+    const fam = await prisma.family.findFirstOrThrow({ where: { guardians: { some: { id: family.id } } } });
+    const start = Number((await prisma.category.findUniqueOrThrow({ where: { id: u11Id } })).season.slice(0, 4));
+    const c3 = await prisma.child.create({ data: { familyId: fam.id, firstName: "Tom", lastName: "Test", birthDate: new Date(Date.UTC(start - 10, 5, 1)), gender: "M" } });
+    // a foreign fee id is ignored, the mandatory kit is always added
+    const reg = await createRegistration(family as never, c3.id, u11Id, [mutation.id, "autre-club-fee"]);
+    expect(reg.licenseFeeCents).toBe(15000 + 3000 + 4500);
+    // the secretary removes the transfer fee (player was not transferred): mandatory kit stays
+    expect(await setRegistrationExtras(staff as never, reg.id, [])).toBe(15000 + 4500);
+    const r = await prisma.registration.findUniqueOrThrow({ where: { id: reg.id } });
+    expect((r.extras as { label: string }[]).map((e) => e.label)).toEqual(["Pack équipement"]);
+    // a family cannot change the tariff through the secretary function
+    await expect(setRegistrationExtras(family as never, reg.id, [mutation.id])).rejects.toThrow();
+    await prisma.clubFee.deleteMany({ where: { id: { in: [mutation.id, kit.id] } } });
   });
 });

@@ -50,6 +50,7 @@ export const addressSchema = z.object({
 export const registrationCreateSchema = z.object({
   childId: z.string().min(1),
   categoryId: z.string().min(1),
+  extraIds: z.array(z.string()).max(20).optional(),
 });
 
 export const installmentsSchema = z.coerce.number().int().min(1).max(4);

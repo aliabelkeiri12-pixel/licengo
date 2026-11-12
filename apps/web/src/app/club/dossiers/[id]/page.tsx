@@ -3,11 +3,11 @@ import { AlertCircle, CheckCircle2, Phone, Mail, History } from "lucide-react";
 import { DOCUMENT_LABELS, SIGNATURE_LABELS, formatEUR, ageAt, footballCategoryFor, type SignableDocument } from "@licengo/core";
 import { prisma } from "@/server/db";
 import { clubContext } from "@/lib/guards";
-import { getRegistration, computeCompleteness } from "@/server/services/registrations";
+import { getRegistration, computeCompleteness, extrasOf } from "@/server/services/registrations";
 import { Card, PageHeader, RegistrationBadge, PaymentBadge, Progress, Badge, formatDate, formatDateTime, Textarea, Input, Field } from "@/components/ui";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { InstallmentsTable } from "@/components/installments-table";
-import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction } from "@/app/actions/club";
+import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction } from "@/app/actions/club";
 
 export const metadata = { title: "Dossier" };
 
@@ -22,6 +22,9 @@ export default async function ClubFile({ params }: { params: Promise<{ id: strin
   const canRefund = user.staff.some((s) => s.clubId === clubId && ["OWNER", "TREASURER"].includes(s.role));
   const expectedCat = footballCategoryFor(r.child.birthDate, Number(r.season.slice(0, 4)));
   const closed = ["REJECTED", "CANCELLED"].includes(r.status);
+  const fees = await prisma.clubFee.findMany({ where: { clubId, active: true }, orderBy: { createdAt: "asc" } });
+  const chosen = new Set(extrasOf(r.extras).map((e) => e.id));
+  const canEditExtras = !closed && !payment && fees.length > 0;
   return (
     <>
       <PageHeader eyebrow={`Dossier · ${r.season}`} title={`${r.child.lastName.toUpperCase()} ${r.child.firstName}`} subtitle={`${r.category.name} · ${ageAt(r.child.birthDate)} ans · catégorie fédérale attendue : ${expectedCat}`} action={<div className="flex gap-2"><RegistrationBadge status={r.status} /><PaymentBadge status={r.paymentStatus} /></div>} />
@@ -112,6 +115,26 @@ export default async function ClubFile({ params }: { params: Promise<{ id: strin
               <ActionForm action={setLicenseNumberAction} className="mt-3 flex gap-2"><input type="hidden" name="registrationId" value={r.id} /><Input name="number" defaultValue={r.federationLicenseNumber ?? ""} placeholder="N° de licence" className="h-10" /><SubmitButton size="sm">OK</SubmitButton></ActionForm>
             </Card>
           )}
+          <Card className="p-5">
+            <h2 className="font-display text-lg font-bold">Tarif</h2>
+            <dl className="mt-2 space-y-1 text-sm">
+              <div className="flex justify-between"><dt className="text-muted">Licence {r.category.name}</dt><dd>{formatEUR(r.category.priceCents)}</dd></div>
+              {extrasOf(r.extras).map((e) => <div key={e.id} className="flex justify-between"><dt className="text-muted">{e.label}</dt><dd>{formatEUR(e.amountCents)}</dd></div>)}
+              <div className="flex justify-between border-t border-line pt-1 font-bold"><dt>Total pour le club</dt><dd>{formatEUR(r.licenseFeeCents)}</dd></div>
+            </dl>
+            {canEditExtras && (
+              <ActionForm action={setExtrasAction} className="mt-3 space-y-2">
+                <input type="hidden" name="registrationId" value={r.id} />
+                {fees.map((f) => (
+                  <label key={f.id} className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="extras" value={f.id} defaultChecked={f.mandatory || chosen.has(f.id)} disabled={f.mandatory} className="accent-pitch-700" />
+                    {f.label} ({formatEUR(f.amountCents)}){f.mandatory && <span className="text-xs text-muted">· obligatoire</span>}
+                  </label>
+                ))}
+                <SubmitButton size="sm" variant="outline">Mettre à jour le tarif</SubmitButton>
+              </ActionForm>
+            )}
+          </Card>
           <Card className="p-5">
             <h2 className="font-display text-lg font-bold">Paiement</h2>
             {payment ? (

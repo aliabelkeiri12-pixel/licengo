@@ -43,7 +43,7 @@ export async function seedDemo(prisma: PrismaClient) {
     prisma.refund.deleteMany(), prisma.installment.deleteMany(), prisma.payment.deleteMany(), prisma.shopOrderItem.deleteMany(), prisma.shopOrder.deleteMany(),
     prisma.cartItem.deleteMany(), prisma.productVariant.deleteMany(), prisma.product.deleteMany(), prisma.supplier.deleteMany(),
     prisma.signature.deleteMany(), prisma.registrationEvent.deleteMany(), prisma.document.deleteMany(), prisma.registration.deleteMany(),
-    prisma.category.deleteMany(), prisma.clubStaff.deleteMany(), prisma.session.deleteMany(), prisma.club.deleteMany(),
+    prisma.category.deleteMany(), prisma.clubFee.deleteMany(), prisma.clubStaff.deleteMany(), prisma.session.deleteMany(), prisma.club.deleteMany(),
     prisma.child.deleteMany(), prisma.user.deleteMany(), prisma.family.deleteMany(), prisma.plan.deleteMany(), prisma.sport.deleteMany(),
   ]);
 
@@ -71,6 +71,10 @@ export async function seedDemo(prisma: PrismaClient) {
       },
     });
     await prisma.category.createMany({ data: defaultFootballCategories(start).map((cat) => ({ ...cat, clubId: created.id, season, capacity: 40 })) });
+    await prisma.clubFee.createMany({ data: [
+      { clubId: created.id, label: "Frais de mutation", amountCents: 3000, description: "Si le joueur était licencié dans un autre club la saison dernière.", mandatory: false },
+      { clubId: created.id, label: "Assurance complémentaire", amountCents: 800, description: "Garanties renforcées en cas de blessure (facultatif).", mandatory: false },
+    ] });
     if (i === 0) await prisma.category.createMany({ data: defaultFootballCategories(start + 1).map((cat) => ({ ...cat, clubId: created.id, season: seasonLabel(start + 1), capacity: 40 })) });
     for (const [pi, p] of products.entries()) {
       await prisma.product.create({

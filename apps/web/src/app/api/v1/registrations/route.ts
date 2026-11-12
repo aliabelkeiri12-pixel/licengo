@@ -12,5 +12,5 @@ export const GET = api(async () => {
 export const POST = api(async (req) => {
   const u = await requireUser("FAMILY");
   const d = registrationCreateSchema.parse(await json(req));
-  return createRegistration(u, d.childId, d.categoryId);
+  return createRegistration(u, d.childId, d.categoryId, d.extraIds ?? []);
 });

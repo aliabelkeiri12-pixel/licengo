@@ -61,7 +61,7 @@ try {
     if (!cat?.includes("U11")) throw new Error(`catégorie inattendue ${cat}`);
     await page.click("text=Commencer l'inscription");
     await page.waitForURL(/\/famille\/inscriptions\/\w+/);
-    await expectText(page, "Dossier de Noah");
+    await expectText(page, "Inscription de Noah");
     await page.getByTestId("payment-locked").waitFor(); // pas de paiement possible tant que le dossier est incomplet
     if (await page.getByRole("button", { name: /Payer/ }).count()) throw new Error("bouton Payer visible sur un dossier incomplet");
   });
@@ -71,23 +71,21 @@ try {
     await page.setInputFiles('[data-testid="file-ID_DOCUMENT"]', path.join(tmp, "identite.pdf"));
     await page.waitForSelector('[data-testid="file-ID_DOCUMENT"]', { state: "detached", timeout: 15000 });
   });
-  await step("Questionnaire de santé + signatures électroniques", async () => {
-    await page.click("text=Oui, NON partout");
-    await page.waitForSelector('[data-testid="sigpad-HEALTH_QUESTIONNAIRE"]');
-    for (const t of ["CLUB_RULES", "PARENTAL_AUTHORIZATION", "HEALTH_QUESTIONNAIRE"]) {
-      const pad = page.locator(`[data-testid="sigpad-${t}"]`);
-      await pad.scrollIntoViewIfNeeded();
-      const b = await pad.boundingBox();
-      await page.mouse.move(b.x + 20, b.y + 60); await page.mouse.down();
-      for (let i = 0; i < 12; i++) await page.mouse.move(b.x + 30 + i * 18, b.y + 40 + (i % 2) * 40);
-      await page.mouse.up();
-      if (t === "CLUB_RULES") await shot(page, "06-signature");
-      await pad.locator("xpath=ancestor::form").getByRole("button", { name: /Signer/ }).click();
-      await page.waitForSelector(`[data-testid="sigpad-${t}"]`, { state: "detached", timeout: 15000 });
-    }
+  await step("Étape 2 : questionnaire de santé + une seule signature", async () => {
+    await page.getByTestId("health-ALL_NO").check();
+    await page.getByTestId("read-all").check();
+    await page.getByTestId("image-yes").check();
+    const pad = page.getByTestId("sigpad-all");
+    await pad.scrollIntoViewIfNeeded();
+    const b = await pad.boundingBox();
+    await page.mouse.move(b.x + 20, b.y + 60); await page.mouse.down();
+    for (let i = 0; i < 12; i++) await page.mouse.move(b.x + 30 + i * 18, b.y + 40 + (i % 2) * 40);
+    await page.mouse.up();
+    await shot(page, "06-signature");
+    await page.getByRole("button", { name: "Signer et continuer" }).click();
+    await page.getByTestId("sigpad-all").waitFor({ state: "detached", timeout: 15000 });
   });
-  await step("Envoi du dossier complet au club", async () => {
-    await page.click("text=Envoyer le dossier complet");
+  await step("Dossier transmis automatiquement au club", async () => {
     await expectText(page, "Dossier complet transmis au club");
     await shot(page, "07-dossier-complet");
   });
@@ -107,7 +105,7 @@ try {
     await page.goto(`${BASE}/famille/paiements`);
     await expectText(page, "Toutes mes factures");
     const links = page.getByTestId("invoice-link");
-    if ((await links.count()) < 2) throw new Error("factures club + LICENGO attendues");
+    if ((await links.count()) !== 1) throw new Error("une seule facture attendue pour la licence");
     const href = await links.first().getAttribute("href");
     const res = await page.request.get(BASE + href);
     if (res.headers()["content-type"] !== "application/pdf" || !(await res.body()).subarray(0, 5).equals(Buffer.from("%PDF-"))) throw new Error("PDF invalide");
