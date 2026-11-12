@@ -294,3 +294,38 @@ describe("suppléments au tarif (mutation…)", () => {
     await prisma.clubFee.deleteMany({ where: { id: { in: [mutation.id, kit.id] } } });
   });
 });
+
+describe("refus par erreur puis réouverture", () => {
+  it("refus : échéances à venir annulées et remboursement signalé ; réouverture : la famille peut renvoyer", async () => {
+    const { createRegistration, setHealthAnswer, signDocument, decide, getRegistration } = await import("@/server/services/registrations");
+    const { uploadDocument } = await import("@/server/services/documents");
+    const { startLicensePayment, markInstallmentPaid } = await import("@/server/services/payments");
+    const fam = await prisma.family.findFirstOrThrow({ where: { guardians: { some: { id: family.id } } } });
+    const start = Number((await prisma.category.findUniqueOrThrow({ where: { id: u11Id } })).season.slice(0, 4));
+    const kid = await prisma.child.create({ data: { familyId: fam.id, firstName: "Lina", lastName: "Test", birthDate: new Date(Date.UTC(start - 10, 1, 1)), gender: "F" } });
+    const reg = await createRegistration(family as never, kid.id, u11Id);
+    await uploadDocument(family as never, { childId: kid.id, type: "PHOTO", file: file(PNG, "p.png", "image/png") });
+    await uploadDocument(family as never, { childId: kid.id, type: "ID_DOCUMENT", file: file(JPEG, "id.jpg", "image/jpeg") });
+    await setHealthAnswer(family as never, reg.id, "ALL_NO");
+    for (const t of ["CLUB_RULES", "PARENTAL_AUTHORIZATION", "HEALTH_QUESTIONNAIRE"] as const) await signDocument(family as never, reg.id, t, { signerName: "Paul Test", accepted: true });
+    const { paymentId } = await startLicensePayment(family as never, reg.id, 4, { acceptBalanceClause: true });
+    const first = await prisma.installment.findFirstOrThrow({ where: { paymentId, index: 1 } });
+    await markInstallmentPaid(first.id, { paymentMethodId: "pm_mock_ok" });
+
+    await decide(staff as never, reg.id, "REJECT", "Document non conforme");
+    expect(await prisma.installment.count({ where: { paymentId, status: "CANCELLED" } })).toBe(3);
+    expect(await prisma.notification.count({ where: { userId: staff.id, type: "REFUND_NEEDED" } })).toBeGreaterThan(0);
+
+    // the family cannot reopen it, the club can
+    await expect(decide(family as never, reg.id, "REOPEN")).rejects.toThrow();
+    await decide(staff as never, reg.id, "REOPEN", "Merci de renvoyer une pièce d'identité lisible");
+    expect((await getRegistration(reg.id)).status).toBe("TO_FIX");
+
+    // the club refuses the ID card, the family sends a new one from its space → file goes back to the club
+    const { reviewDocument } = await import("@/server/services/documents");
+    const id = await prisma.document.findFirstOrThrow({ where: { childId: kid.id, type: "ID_DOCUMENT", deletedAt: null } });
+    await reviewDocument(staff as never, id.id, false, "Illisible");
+    await uploadDocument(family as never, { childId: kid.id, registrationId: reg.id, type: "ID_DOCUMENT", file: file(JPEG, "id2.jpg", "image/jpeg") });
+    expect((await getRegistration(reg.id)).status).toBe("SUBMITTED");
+  });
+});

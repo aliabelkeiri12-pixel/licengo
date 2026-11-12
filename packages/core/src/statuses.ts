@@ -39,7 +39,7 @@ const transitions: Record<RegistrationStatus, RegistrationStatus[]> = {
   SUBMITTED: ["VALIDATED", "TO_FIX", "REJECTED", "INCOMPLETE"],
   TO_FIX: ["SUBMITTED", "INCOMPLETE", "REJECTED", "CANCELLED"],
   VALIDATED: ["TO_FIX", "CANCELLED"],
-  REJECTED: [],
+  REJECTED: ["TO_FIX"], // the club can reopen a file refused by mistake
   CANCELLED: [],
 };
 export const canTransition = (from: RegistrationStatus, to: RegistrationStatus) => transitions[from].includes(to);

@@ -76,6 +76,7 @@ describe("catégories & divers", () => {
   it("transitions de statut", () => {
     expect(canTransition("SUBMITTED", "VALIDATED")).toBe(true);
     expect(canTransition("REJECTED", "VALIDATED")).toBe(false);
+    expect(canTransition("REJECTED", "TO_FIX")).toBe(true); // reopen a file refused by mistake
   });
   it("distance Paris–Lyon ≈ 392 km", () => {
     expect(Math.round(haversineKm(48.8566, 2.3522, 45.764, 4.8357))).toBeGreaterThan(385);

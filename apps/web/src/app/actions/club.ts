@@ -32,7 +32,13 @@ async function clubWriter(...roles: SR[]) {
 export async function decisionAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return safe(async () => {
     const { user } = await clubWriter("SECRETARY");
+    if (fd.get("decision") === "REOPEN") {
+      await decide(user, str(fd, "registrationId"), "REOPEN", str(fd, "reason") || undefined);
+      revalidatePath("/club", "layout");
+      return { ok: "Dossier rouvert : la famille peut renvoyer ses documents" };
+    }
     const d = decisionSchema.parse({ decision: fd.get("decision"), reason: str(fd, "reason") || undefined });
+    if (d.decision === "REJECT" && fd.get("confirmReject") !== "on") throw new AppError("Cochez la case pour confirmer le refus définitif de l'inscription");
     await decide(user, str(fd, "registrationId"), d.decision, d.reason);
     revalidatePath("/club", "layout");
     return { ok: { VALIDATE: "Dossier validé, la famille est notifiée.", REJECT: "Dossier refusé.", REQUEST_CHANGES: "Demande de modification envoyée." }[d.decision] };

@@ -145,7 +145,8 @@ export async function submitRegistration(user: SessionUser, registrationId: stri
   return res;
 }
 
-export async function decide(user: SessionUser, registrationId: string, decision: "VALIDATE" | "REJECT" | "REQUEST_CHANGES", reason?: string) {
+export async function decide(user: SessionUser, registrationId: string, decision: "VALIDATE" | "REJECT" | "REQUEST_CHANGES" | "REOPEN", reason?: string) {
+  if (decision === "REOPEN") return reopenRegistration(user, registrationId, reason);
   const r = await assertClubAccess(user, registrationId);
   const target: RegistrationStatus = decision === "VALIDATE" ? "VALIDATED" : decision === "REJECT" ? "REJECTED" : "TO_FIX";
   if (!canTransition(r.status, target)) throw new AppError(`Action impossible depuis le statut actuel`);
@@ -157,6 +158,14 @@ export async function decide(user: SessionUser, registrationId: string, decision
     where: { id: r.id },
     data: { status: target, decisionReason: decision === "VALIDATE" ? null : reason, validatedAt: decision === "VALIDATE" ? new Date() : undefined },
   });
+  if (decision === "REJECT") {
+    // a refused licence must not keep charging the family
+    const stopped = await prisma.installment.updateMany({ where: { payment: { registrationId: r.id }, status: { in: ["SCHEDULED", "FAILED"] } }, data: { status: "CANCELLED" } });
+    const paid = await prisma.installment.aggregate({ where: { payment: { registrationId: r.id }, status: "PAID" }, _sum: { amountCents: true } });
+    if (stopped.count) await event(r.id, user.id, "PAYMENTS_STOPPED", `${stopped.count} échéance(s) à venir annulée(s)`);
+    if (paid._sum.amountCents)
+      await notifyClubStaff(r.clubId, { type: "REFUND_NEEDED", title: "Remboursement à prévoir", body: `${r.child.firstName} ${r.child.lastName} : inscription refusée alors que ${(paid._sum.amountCents / 100).toFixed(2).replace(".", ",")} € ont été payés.`, link: `/club/dossiers/${r.id}` });
+  }
   const label = { VALIDATE: "Dossier validé", REJECT: "Dossier refusé", REQUEST_CHANGES: "Modification demandée" }[decision];
   await event(r.id, user.id, decision, reason ? `${label} : ${reason}` : label);
   await audit(user.id, `registration.${decision.toLowerCase()}`, "Registration", r.id, { reason: reason ?? null });
@@ -166,6 +175,17 @@ export async function decide(user: SessionUser, registrationId: string, decision
     body: decision === "VALIDATE" ? `L'inscription de ${r.child.firstName} en ${r.category.name} est validée. Bienvenue au club !` : `${r.child.firstName} : ${reason}`,
     link: `/famille/inscriptions/${r.id}`,
   });
+}
+
+/** Reopens a file refused by mistake: the family can correct it again. */
+export async function reopenRegistration(user: SessionUser, registrationId: string, reason?: string) {
+  const r = await assertClubAccess(user, registrationId);
+  if (r.status !== "REJECTED") throw new AppError("Seul un dossier refusé peut être rouvert");
+  const message = reason?.trim() || "Merci de renvoyer les documents demandés.";
+  await prisma.registration.update({ where: { id: r.id }, data: { status: "TO_FIX", decisionReason: message } });
+  await event(r.id, user.id, "REOPEN", `Dossier rouvert par le club : ${message}`);
+  await audit(user.id, "registration.reopen", "Registration", r.id);
+  await notifyFamily(r.child.familyId, { type: "REGISTRATION_REOPENED", title: `${r.club.name} – dossier à compléter`, body: `${r.child.firstName} : ${message}`, link: `/famille/inscriptions/${r.id}` });
 }
 
 export async function setHealthAnswer(user: SessionUser, registrationId: string, answer: "ALL_NO" | "SOME_YES") {

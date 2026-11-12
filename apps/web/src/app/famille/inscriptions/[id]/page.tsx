@@ -67,13 +67,20 @@ export default async function RegistrationPage({ params, searchParams }: { param
       <PageHeader eyebrow={`${r.club.name} · Saison ${r.season}`} title={`Inscription de ${r.child.firstName}`} subtitle={`${r.category.name} · ${formatEUR(r.licenseFeeCents + r.platformFeeCents)} frais de service inclus`} />
       {paiement === "ok" && <div className="mb-4"><Alert tone="success">Paiement confirmé, merci ! Votre reçu et votre facture vous ont été envoyés par email.</Alert></div>}
       {paiement === "annule" && <div className="mb-4"><Alert tone="warning">Paiement annulé. Vous pouvez réessayer à tout moment.</Alert></div>}
-      {r.decisionReason && ["TO_FIX", "REJECTED"].includes(r.status) && (
-        <div className="mb-4"><Alert tone={r.status === "REJECTED" ? "error" : "warning"}><MessageSquareWarning className="mr-1 inline h-4 w-4" /><b>Message du club :</b> {r.decisionReason}</Alert></div>
+      {r.decisionReason && r.status === "TO_FIX" && (
+        <div className="mb-4"><Alert tone="warning"><MessageSquareWarning className="mr-1 inline h-4 w-4" /><b>Message du club :</b> {r.decisionReason}</Alert></div>
       )}
       {r.status === "SUBMITTED" && <div className="mb-4"><Alert tone="success">✅ Dossier complet transmis au club. Il est en cours de vérification : vous serez prévenu dès sa validation.</Alert></div>}
       {r.status === "VALIDATED" && <div className="mb-4"><Alert tone="success">🎉 Inscription validée par le club. {r.federationLicenseNumber ? `N° de licence : ${r.federationLicenseNumber}` : "Le numéro de licence fédérale apparaîtra ici dès son enregistrement."}</Alert></div>}
 
       <div className="mb-6"><div className="mb-1 flex justify-between text-sm"><span className="font-semibold">Dossier complété</span><span className="font-bold text-pitch-700">{c.progress}%</span></div><Progress value={c.progress} /></div>
+      {r.status === "REJECTED" && (
+        <div className="mb-4 rounded-2xl border-2 border-danger bg-red-50 p-4">
+          <p className="font-bold text-danger">L'inscription a été refusée par le club</p>
+          <p className="mt-1 text-sm">Motif : {r.decisionReason}</p>
+          <p className="mt-2 text-sm text-muted">S'il s'agit d'un document à refaire, contactez {r.club.name}{r.club.phone ? ` (${r.club.phone})` : ""} : le club peut rouvrir votre dossier en un clic.</p>
+        </div>
+      )}
       {rejected.length > 0 && !closed && (
         <div className="mb-4 rounded-2xl border-2 border-danger bg-red-50 p-4" data-testid="rejected-banner">
           <p className="font-bold text-danger">⚠️ Le club vous demande de renvoyer {rejected.length > 1 ? "des documents" : "un document"}</p>

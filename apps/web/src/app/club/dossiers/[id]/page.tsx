@@ -96,6 +96,17 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
         </div>
 
         <aside className="space-y-6">
+          {r.status === "REJECTED" && (
+            <Card className="border-red-200 p-5">
+              <h2 className="font-display text-lg font-bold">Inscription refusée</h2>
+              <p className="mt-1 text-sm text-muted">Refusée par erreur ? Rouvrez le dossier : la famille pourra corriger et renvoyer ses documents.</p>
+              <ActionForm action={decisionAction} className="mt-3 space-y-2">
+                <input type="hidden" name="registrationId" value={r.id} />
+                <Textarea name="reason" placeholder="Message à la famille (ex : merci de renvoyer une photo nette)" />
+                <button name="decision" value="REOPEN" className="h-11 w-full rounded-xl bg-pitch-800 text-sm font-semibold text-white">Rouvrir le dossier</button>
+              </ActionForm>
+            </Card>
+          )}
           {!closed && (
             <Card className="p-5">
               <h2 className="font-display text-lg font-bold">Décision</h2>
@@ -104,9 +115,17 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
                 <Field label="Motif / message à la famille" name="reason" hint="Obligatoire pour un refus ou une demande de modification"><Textarea name="reason" placeholder="Ex : la photo doit être de face, sur fond clair." /></Field>
                 <div className="grid gap-2">
                   {r.status !== "VALIDATED" && <button name="decision" value="VALIDATE" disabled={c.state !== "COMPLETE"} className="h-11 rounded-xl bg-pitch-800 text-sm font-semibold text-white disabled:opacity-40">✓ Valider le dossier</button>}
-                  <button name="decision" value="REQUEST_CHANGES" className="h-11 rounded-xl border border-line bg-white text-sm font-semibold">Demander une modification</button>
-                  {r.status !== "VALIDATED" && <button name="decision" value="REJECT" className="h-11 rounded-xl text-sm font-semibold text-danger hover:bg-red-50">Refuser l'inscription</button>}
+                  <button name="decision" value="REQUEST_CHANGES" className="h-11 rounded-xl border-2 border-pitch-700 bg-white text-sm font-semibold text-pitch-800">↩ Demander une correction à la famille</button>
+                  <p className="text-xs text-muted">La famille reçoit votre message et peut renvoyer ses documents depuis son espace.</p>
                 </div>
+                {r.status !== "VALIDATED" && (
+                  <details className="mt-3 rounded-xl border border-red-200 p-3">
+                    <summary className="cursor-pointer text-sm font-semibold text-danger">Refuser définitivement l'inscription…</summary>
+                    <p className="mt-2 text-xs text-muted">À utiliser seulement si l'enfant ne peut pas être accepté au club (catégorie pleine, exclusion…). Le dossier est clôturé et les échéances à venir sont annulées. Pour un document à refaire, utilisez « Demander une correction ».</p>
+                    <label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" name="confirmReject" className="accent-red-600" /> Je confirme le refus définitif</label>
+                    <button name="decision" value="REJECT" className="mt-2 h-10 w-full rounded-xl bg-danger text-sm font-semibold text-white">Refuser l'inscription</button>
+                  </details>
+                )}
                 {c.state !== "COMPLETE" && <p className="text-xs text-muted">La validation est possible dès que le dossier est complet.</p>}
               </ActionForm>
             </Card>
