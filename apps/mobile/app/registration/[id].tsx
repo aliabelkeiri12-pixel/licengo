@@ -34,6 +34,7 @@ export default function RegistrationScreen() {
   useEffect(() => { load(); }, [load]);
   if (!r) return null;
   const editable = ["DRAFT", "INCOMPLETE", "TO_FIX"].includes(r.status);
+  const canUpload = !["REJECTED", "CANCELLED"].includes(r.status); // a document refused by the club can always be sent again
   const signerName = `${me?.user.firstName} ${me?.user.lastName}`;
 
   /** Takes the photo with the camera, compresses it (≈2000 px JPEG) and uploads it. */
@@ -100,7 +101,7 @@ export default function RegistrationScreen() {
               {d ? <Badge label={d.status === "ACCEPTED" ? "Validé" : d.status === "REJECTED" ? "Refusé" : "Envoyé"} color={d.status === "REJECTED" ? colors.danger : colors.pitch600} /> : null}
             </View>
             {d?.rejectReason ? <Text style={{ color: colors.danger, marginTop: 4 }}>Motif : {d.rejectReason}</Text> : null}
-            {editable && !ok ? (
+            {canUpload && !ok ? (
               <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
                 <Button title="📷 Photographier" style={{ flex: 1 }} loading={busy === t} onPress={() => capture(t)} />
                 <Button title="Galerie" variant="outline" onPress={() => capture(t, true)} />

@@ -45,6 +45,8 @@ export async function reviewDocumentAction(_: ActionState, fd: FormData): Promis
     const accept = str(fd, "accept") === "1";
     await reviewDocument(user, str(fd, "documentId"), accept, str(fd, "reason") || undefined);
     revalidatePath("/club", "layout");
+    const regId = str(fd, "registrationId");
+    if (regId) redirect(`/club/dossiers/${regId}?doc=${accept ? "valide" : "refuse"}`);
     return { ok: accept ? "Document validé" : "Document refusé, la famille est prévenue" };
   });
 }

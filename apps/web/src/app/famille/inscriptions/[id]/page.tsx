@@ -60,6 +60,7 @@ export default async function RegistrationPage({ params, searchParams }: { param
   if (needsHealth && !signItems.some((i) => i.type === "HEALTH_QUESTIONNAIRE") && r.healthAnswer !== "SOME_YES")
     signItems.push({ type: "HEALTH_QUESTIONNAIRE", label: SIGNATURE_LABELS.HEALTH_QUESTIONNAIRE, text: SIGN_TEXT.HEALTH_QUESTIONNAIRE });
   const otherIssues = c.issues.filter((i) => !i.code.startsWith("DOC_"));
+  const rejected = docs.filter((d) => d.status === "REJECTED" && c.requiredUploads.includes(d.type as never));
 
   return (
     <>
@@ -73,10 +74,18 @@ export default async function RegistrationPage({ params, searchParams }: { param
       {r.status === "VALIDATED" && <div className="mb-4"><Alert tone="success">🎉 Inscription validée par le club. {r.federationLicenseNumber ? `N° de licence : ${r.federationLicenseNumber}` : "Le numéro de licence fédérale apparaîtra ici dès son enregistrement."}</Alert></div>}
 
       <div className="mb-6"><div className="mb-1 flex justify-between text-sm"><span className="font-semibold">Dossier complété</span><span className="font-bold text-pitch-700">{c.progress}%</span></div><Progress value={c.progress} /></div>
+      {rejected.length > 0 && !closed && (
+        <div className="mb-4 rounded-2xl border-2 border-danger bg-red-50 p-4" data-testid="rejected-banner">
+          <p className="font-bold text-danger">⚠️ Le club vous demande de renvoyer {rejected.length > 1 ? "des documents" : "un document"}</p>
+          <ul className="mt-2 space-y-1 text-sm">{rejected.map((d) => <li key={d.id}><b>{DOCUMENT_LABELS[d.type]}</b> : {d.rejectReason}</li>)}</ul>
+          <a href="#etape-1" className="mt-3 inline-flex rounded-xl bg-danger px-4 py-2 text-sm font-semibold text-white">Renvoyer maintenant ↓</a>
+        </div>
+      )}
       {otherIssues.length > 0 && <div className="mb-4 space-y-1">{otherIssues.map((i) => <Alert key={i.code} tone="error"><AlertCircle className="mr-1 inline h-4 w-4" />{i.message}</Alert>)}</div>}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
+          <div id="etape-1" className="scroll-mt-24" />
           <Step n={1} title="Les documents" done={docsDone} active={current === 1}>
             <p className="mb-4 text-sm text-muted">Prenez simplement une photo avec votre téléphone.</p>
             <ul className="space-y-3">
@@ -86,7 +95,9 @@ export default async function RegistrationPage({ params, searchParams }: { param
                 return (
                   <li key={t} className="rounded-xl border border-line p-4">
                     <p className="flex items-center gap-2 font-semibold">{ok ? <CheckCircle2 className="h-5 w-5 text-pitch-600" /> : <Circle className="h-5 w-5 text-muted" />}{DOCUMENT_LABELS[t]}</p>
-                    {current && <div className="mt-3"><DocumentRow doc={current} canDelete={editable} /></div>}
+                    {current?.status === "REJECTED" ? (
+                      <p className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-danger"><b>Refusé par le club :</b> {current.rejectReason}<br /><span className="text-ink">Envoyez un nouveau document ci-dessous, il remplacera l'ancien.</span></p>
+                    ) : current && <div className="mt-3"><DocumentRow doc={current} canDelete={editable} /></div>}
                     {!closed && !ok && <div className="mt-3"><DocumentUploader childId={r.childId} registrationId={r.id} type={t} withExpiry={t === "MEDICAL_CERTIFICATE"} /></div>}
                   </li>
                 );

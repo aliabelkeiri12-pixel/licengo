@@ -5,6 +5,7 @@ import { AppError, forbidden, notFound } from "../errors";
 import { storeEncrypted, readDecrypted } from "../storage";
 import { audit } from "../audit";
 import { notifyFamily } from "../notify";
+import { sendMail, appLink } from "../mail";
 import type { SessionUser } from "../auth";
 import { recompute } from "./registrations";
 
@@ -77,7 +78,20 @@ export async function reviewDocument(user: SessionUser, id: string, accept: bool
   if (!accept && (!reason || reason.trim().length < 3)) throw new AppError("Motif de refus obligatoire");
   await prisma.document.update({ where: { id }, data: { status: accept ? "ACCEPTED" : "REJECTED", rejectReason: accept ? null : reason, reviewedById: user.id, reviewedAt: new Date() } });
   await audit(user.id, accept ? "document.accept" : "document.reject", "Document", id, { reason: reason ?? null });
-  if (!accept) await notifyFamily(doc.familyId, { type: "DOCUMENT_REJECTED", title: `Document refusé : ${DOCUMENT_LABELS[doc.type]}`, body: reason!, link: "/famille" });
+  if (!accept) {
+    // send the family straight to the file concerned, in-app + push + email
+    const reg = doc.childId ? await prisma.registration.findFirst({ where: { childId: doc.childId, status: { notIn: ["REJECTED", "CANCELLED"] } }, orderBy: { createdAt: "desc" }, include: { club: true, child: true } }) : null;
+    const link = reg ? `/famille/inscriptions/${reg.id}` : doc.childId ? `/famille/enfants/${doc.childId}` : "/famille";
+    await notifyFamily(doc.familyId, { type: "DOCUMENT_REJECTED", title: `Document à renvoyer : ${DOCUMENT_LABELS[doc.type]}`, body: `${reg ? `${reg.club.name} – ${reg.child.firstName} : ` : ""}${reason}`, link });
+    const guardians = await prisma.user.findMany({ where: { familyId: doc.familyId, deletedAt: null } });
+    for (const g of guardians)
+      await sendMail(g.email, `Document à renvoyer : ${DOCUMENT_LABELS[doc.type]}`, [
+        `Bonjour ${g.firstName},`, "",
+        `${reg ? `${reg.club.name} a vérifié le dossier de ${reg.child.firstName} et ` : "Le club "}n'a pas pu accepter le document « ${DOCUMENT_LABELS[doc.type]} ».`,
+        `Motif : ${reason}`, "",
+        `Pour le renvoyer, ouvrez le dossier et utilisez le bouton « Photographier » ou « Fichier » à l'étape 1 :`, appLink(link), "", "LICENGO",
+      ].join("\n"));
+  }
   if (doc.childId) await recomputeChildRegistrations(doc.childId);
 }
 

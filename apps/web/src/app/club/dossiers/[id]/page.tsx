@@ -4,14 +4,15 @@ import { DOCUMENT_LABELS, SIGNATURE_LABELS, formatEUR, ageAt, footballCategoryFo
 import { prisma } from "@/server/db";
 import { clubContext } from "@/lib/guards";
 import { getRegistration, computeCompleteness, extrasOf } from "@/server/services/registrations";
-import { Card, PageHeader, RegistrationBadge, PaymentBadge, Progress, Badge, formatDate, formatDateTime, Textarea, Input, Field } from "@/components/ui";
+import { Alert, Card, PageHeader, RegistrationBadge, PaymentBadge, Progress, Badge, formatDate, formatDateTime, Textarea, Input, Field } from "@/components/ui";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { InstallmentsTable } from "@/components/installments-table";
 import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction } from "@/app/actions/club";
 
 export const metadata = { title: "Dossier" };
 
-export default async function ClubFile({ params }: { params: Promise<{ id: string }> }) {
+export default async function ClubFile({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ doc?: string }> }) {
+  const { doc: docMsg } = await searchParams;
   const { user, clubId } = await clubContext();
   const r = await getRegistration((await params).id).catch(() => null);
   if (!r || r.clubId !== clubId) notFound();
@@ -28,6 +29,8 @@ export default async function ClubFile({ params }: { params: Promise<{ id: strin
   return (
     <>
       <PageHeader eyebrow={`Dossier · ${r.season}`} title={`${r.child.lastName.toUpperCase()} ${r.child.firstName}`} subtitle={`${r.category.name} · ${ageAt(r.child.birthDate)} ans · catégorie fédérale attendue : ${expectedCat}`} action={<div className="flex gap-2"><RegistrationBadge status={r.status} /><PaymentBadge status={r.paymentStatus} /></div>} />
+      {docMsg === "refuse" && <div className="mb-4"><Alert tone="warning">Document refusé. La famille a été prévenue (notification et email) et peut le renvoyer depuis son dossier.</Alert></div>}
+      {docMsg === "valide" && <div className="mb-4"><Alert tone="success">Document validé.</Alert></div>}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-6">
           <Card className="p-5">
@@ -71,8 +74,8 @@ export default async function ClubFile({ params }: { params: Promise<{ id: strin
                           {d.rejectReason && <p className="text-danger">Motif : {d.rejectReason}</p>}
                           {!closed && d.status === "PENDING" && (
                             <div className="mt-2 flex flex-wrap gap-2">
-                              <ActionForm action={reviewDocumentAction}><input type="hidden" name="documentId" value={d.id} /><input type="hidden" name="accept" value="1" /><SubmitButton size="sm">Valider</SubmitButton></ActionForm>
-                              <ActionForm action={reviewDocumentAction} className="flex gap-2"><input type="hidden" name="documentId" value={d.id} /><input type="hidden" name="accept" value="0" /><Input name="reason" placeholder="Motif du refus (ex : photo floue)" className="h-9 w-56 text-sm" required minLength={3} /><SubmitButton size="sm" variant="outline">Refuser</SubmitButton></ActionForm>
+                              <ActionForm action={reviewDocumentAction}><input type="hidden" name="documentId" value={d.id} /><input type="hidden" name="registrationId" value={r.id} /><input type="hidden" name="accept" value="1" /><SubmitButton size="sm">Valider</SubmitButton></ActionForm>
+                              <ActionForm action={reviewDocumentAction} className="flex gap-2"><input type="hidden" name="documentId" value={d.id} /><input type="hidden" name="registrationId" value={r.id} /><input type="hidden" name="accept" value="0" /><Input name="reason" placeholder="Motif du refus (ex : photo floue)" className="h-9 w-56 text-sm" required minLength={3} /><SubmitButton size="sm" variant="outline">Refuser</SubmitButton></ActionForm>
                             </div>
                           )}
                         </div>

@@ -107,8 +107,14 @@ describe("parcours complet licence", () => {
     await uploadDocument(family as never, { childId, type: "PHOTO", file: file(PNG, "photo2.png", "image/png") });
     const res = await submitRegistration(family as never, regId);
     expect(res.status).toBe("SUBMITTED");
-    const notifs = await prisma.notification.count({ where: { userId: family.id, type: "DOCUMENT_REJECTED" } });
-    expect(notifs).toBe(1);
+    const notifs = await prisma.notification.findMany({ where: { userId: family.id, type: "DOCUMENT_REJECTED" } });
+    expect(notifs).toHaveLength(1);
+    expect(notifs[0].link).toBe(`/famille/inscriptions/${regId}`); // straight to the file, not the home page
+    expect(notifs[0].body).toContain("Photo floue");
+    const mails = (globalThis as { __sentMails?: { to: string; subject: string; text: string }[] }).__sentMails ?? [];
+    const m = mails.find((x) => x.subject.startsWith("Document à renvoyer"));
+    expect(m?.to).toBe("f@test.fr");
+    expect(m?.text).toContain(`/famille/inscriptions/${regId}`);
   });
 
   it("validation par le club avec historique", async () => {

@@ -22,6 +22,7 @@ Captures générées automatiquement par le scénario E2E (`apps/web/e2e/run.mjs
 | Paiement | Facture unique : licence, suppléments, frais de service et échéancier | `ecrans/18-facture-unique.png` |
 | Inscription | Choix des suppléments (mutation, assurance…) | `ecrans/19-inscription-supplements.png` |
 | Inscription | Dossier en 3 étapes (documents, santé et signature, paiement) | `ecrans/20-dossier-3-etapes.png` |
+| Inscription | Document refusé par le club : bandeau et renvoi | `ecrans/21-document-refuse.png` |
 | Tableau de bord famille | Accueil famille | `ecrans/13-accueil-famille.png` |
 | Notifications | Centre de notifications | `ecrans/14-notifications.png` |
 | Club | Tableau de bord | `ecrans/20-club-tableau-de-bord.png` |
