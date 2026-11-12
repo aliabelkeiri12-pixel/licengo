@@ -17,6 +17,7 @@ Captures générées automatiquement par le scénario E2E (`apps/web/e2e/run.mjs
 | Boutique | Boutique du club | `ecrans/10-boutique.png` |
 | Panier | Panier | `ecrans/11-panier.png` |
 | Commandes | Suivi de commande | `ecrans/12-commande.png` |
+| Paiement | Email de reçu envoyé au payeur | `ecrans/16-email-recu.png` |
 | Tableau de bord famille | Accueil famille | `ecrans/13-accueil-famille.png` |
 | Notifications | Centre de notifications | `ecrans/14-notifications.png` |
 | Club | Tableau de bord | `ecrans/20-club-tableau-de-bord.png` |

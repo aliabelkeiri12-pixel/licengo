@@ -18,3 +18,14 @@ Nom de domaine : dans Render, service `licengo` → Settings → Custom Domains 
 Paiements réels : renseignez `STRIPE_SECRET_KEY` et `STRIPE_WEBHOOK_SECRET` dans Render → Environment (voir `docs/DEPLOIEMENT.md`, section Stripe Connect), webhook vers `https://<votre-site>/api/webhooks/stripe`.
 
 Testé : l'image `Dockerfile.render` démarre sur une base vide (migrations, offres, sports, administrateur), redémarre sans dupliquer les données, et la tâche planifiée répond 200.
+
+## Emails (reçus de paiement)
+
+À chaque paiement (licence, chaque échéance, boutique), un reçu détaillé est envoyé à l'email du compte payeur, y compris pour les paiements de démonstration. Envoi par **Brevo** (gratuit jusqu'à 300 emails/jour) :
+
+1. Créez un compte gratuit sur **brevo.com**.
+2. Menu **Senders, Domains & Dedicated IPs → Senders → Add a sender** : ajoutez votre adresse email et validez-la via le lien reçu.
+3. Menu **SMTP & API → API Keys → Generate a new API key** : copiez la clé (commence par `xkeysib-`).
+4. Dans Render, service `licengo-demo` → **Environment** → ajoutez `BREVO_API_KEY` (la clé) et `MAIL_FROM` (l'adresse validée à l'étape 2), puis **Save changes**.
+
+Sans ces deux valeurs, le site fonctionne mais les emails ne sont pas envoyés.

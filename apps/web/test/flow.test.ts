@@ -129,11 +129,22 @@ describe("parcours complet licence", () => {
     expect(p.platformFeeCents).toBe(499);
     await markInstallmentPaid(p.installments[0].id, { intentId: "pi_1", customerId: "cus_1", paymentMethodId: "pm_mock_ok" });
     await markInstallmentPaid(p.installments[0].id, { intentId: "pi_1" }); // idempotent
+    const mails = (globalThis as { __sentMails?: { to: string; subject: string; text: string; html?: string }[] }).__sentMails ?? [];
+    const receipts = mails.filter((m) => m.subject.startsWith("Votre reçu LICENGO"));
+    expect(receipts).toHaveLength(1); // one receipt, not resent on the idempotent call
+    expect(receipts[0].to).toBe("f@test.fr");
+    expect(receipts[0].subject).toContain("54,99");
+    expect(receipts[0].text).toMatch(/dont reversé au club : 50,00/);
+    expect(receipts[0].text).toMatch(/dont frais de service LICENGO : 4,99/);
+    expect(receipts[0].text).toContain("Paiement de démonstration");
+    expect(receipts[0].text).toContain("Prochaines échéances");
+    expect(receipts[0].html).toContain("<b style=\"color:#0E1512\">FC Test</b>");
     expect((await prisma.registration.findUniqueOrThrow({ where: { id: regId } })).paymentStatus).toBe("PARTIAL");
     await expect(startLicensePayment(family as never, regId, 1)).rejects.toThrow();
     const far = new Date(Date.now() + 70 * 86400_000);
     const res = await runDueInstallments(far);
     expect(res).toEqual({ charged: 2, failed: 0 });
+    expect(((globalThis as { __sentMails?: { subject: string }[] }).__sentMails ?? []).filter((m) => m.subject.startsWith("Votre reçu LICENGO")).length).toBe(3); // one receipt per installment
     expect((await prisma.registration.findUniqueOrThrow({ where: { id: regId } })).paymentStatus).toBe("PAID");
     expect((await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })).status).toBe("COMPLETED");
   });
