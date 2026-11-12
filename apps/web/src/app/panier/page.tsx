@@ -2,7 +2,7 @@ import { formatEUR } from "@licengo/core";
 import { requireUser } from "@/server/auth";
 import { getCart } from "@/server/services/shop";
 import { Card, PageHeader, EmptyState, LinkButton } from "@/components/ui";
-import { ProductArt } from "@/components/product-art";
+import { ProductVisual } from "@/components/product-visual";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { updateCartAction, checkoutAction } from "@/app/actions/family";
 
@@ -20,7 +20,7 @@ export default async function Cart() {
         <Card className="divide-y divide-line">
           {items.map((i) => (
             <div key={i.id} className="flex items-center gap-4 p-4">
-              <ProductArt category={i.variant.product.category} color={i.variant.product.club.primaryColor} className="h-16 w-16 shrink-0" />
+              <ProductVisual product={i.variant.product} color={i.variant.product.club.primaryColor} className="h-16 w-16 shrink-0" />
               <div className="min-w-0 flex-1"><p className="font-semibold">{i.variant.product.name}</p><p className="text-xs text-muted">Taille {i.variant.size} · {i.variant.product.club.name}{i.personalization ? ` · Flocage « ${i.personalization} »` : ""}</p></div>
               <form action={updateCartAction} className="flex items-center gap-1">
                 <input type="hidden" name="itemId" value={i.id} />

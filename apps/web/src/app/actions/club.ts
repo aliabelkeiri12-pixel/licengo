@@ -140,13 +140,50 @@ const productSchema = z.object({
   supplierId: z.string().optional(),
 });
 
+/** Validated product photo from the form (JPEG/PNG/WEBP, 3 MB max after browser resizing). */
+async function readPhoto(fd: FormData): Promise<{ imageData: Uint8Array<ArrayBuffer>; imageMime: string } | null> {
+  const f = fd.get("photo");
+  if (!(f instanceof File) || f.size === 0) return null;
+  if (f.size > 3_000_000) throw new AppError("Photo trop lourde (3 Mo maximum)");
+  const buf = Buffer.from(await f.arrayBuffer());
+  const { sniffMime } = await import("@/server/services/documents");
+  const mime = sniffMime(buf);
+  if (!mime || !["image/jpeg", "image/png", "image/webp"].includes(mime)) throw new AppError("Format de photo non accepté (JPG, PNG ou WEBP)");
+  return { imageData: new Uint8Array(buf), imageMime: mime };
+}
+
+export async function updateProductAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const { user, clubId } = await clubWriter("SECRETARY", "TREASURER");
+    const p = await prisma.product.findFirst({ where: { id: str(fd, "productId"), clubId } });
+    if (!p) throw new AppError("Article introuvable");
+    const d = z.object({
+      name: z.string().trim().min(2, "Nom requis").max(80),
+      price: z.coerce.number().min(0.5, "Prix invalide").max(2000),
+      description: z.string().trim().max(500).optional(),
+      newSizes: z.string().trim().max(200).optional(),
+    }).parse(Object.fromEntries(fd));
+    const photo = await readPhoto(fd);
+    await prisma.product.update({ where: { id: p.id }, data: { name: d.name, priceCents: toCents(d.price), description: d.description || null, ...(photo ?? {}) } });
+    const sizes = [...new Set((d.newSizes ?? "").split(",").map((s) => s.trim()).filter(Boolean))];
+    const existing = new Set((await prisma.productVariant.findMany({ where: { productId: p.id } })).map((v) => v.size));
+    for (const [i, size] of sizes.filter((s) => !existing.has(s)).entries())
+      await prisma.productVariant.create({ data: { productId: p.id, size, stock: 0, sku: `${clubId.slice(-5).toUpperCase()}-${Date.now().toString(36).toUpperCase()}-N${i}` } });
+    await audit(user.id, "product.update", "Product", p.id);
+    revalidatePath("/club/boutique");
+    return { ok: "Article mis à jour" };
+  });
+}
+
 export async function createProductAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return safe(async () => {
     const { user, clubId } = await clubWriter("SECRETARY", "TREASURER");
     const d = productSchema.parse(Object.fromEntries(fd));
     const sizes = [...new Set(d.sizes.split(",").map((s) => s.trim()).filter(Boolean))].slice(0, 20);
+    const photo = await readPhoto(fd);
     const p = await prisma.product.create({
       data: {
+        ...(photo ?? {}),
         clubId, name: d.name, category: d.category as ProductCategory, priceCents: toCents(d.price), costCents: d.cost ? toCents(d.cost) : null, description: d.description, supplierId: d.supplierId || null,
         variants: { create: sizes.map((size, i) => ({ size, stock: d.stock, sku: `${clubId.slice(-5).toUpperCase()}-${Date.now().toString(36).toUpperCase()}-${i}` })) },
       },

@@ -176,7 +176,22 @@ try {
     await club.goto(`${BASE}/club/paiements`);
     await shot(club, "24-club-paiements");
   });
-  await step("Déconnexion", async () => { await club.getByRole("button", { name: "Se déconnecter" }).last().click(); await club.waitForURL(BASE + "/"); });
+  await step("Boutique club : ajout d'un article avec photo", async () => {
+    await club.goto(`${BASE}/club/boutique`);
+    const form = club.locator("#ajouter-article");
+    await form.locator('input[type=file][name="photo"]').setInputFiles(path.join(tmp, "photo.png"));
+    await form.locator('[name="name"]').fill("Écharpe du club");
+    await form.locator('[name="price"]').fill("19");
+    await form.locator('[name="sizes"]').fill("Unique");
+    await form.getByRole("button", { name: "Ajouter" }).click();
+    await expectText(club, "Article ajouté à la boutique");
+    await club.goto(`${BASE}/boutique/fc-lyon-est`);
+    const img = club.locator('img[alt="Écharpe du club"]');
+    await img.waitFor();
+    const res = await club.request.get(BASE + (await img.getAttribute("src")));
+    if (!res.ok() || !String(res.headers()["content-type"]).startsWith("image/")) throw new Error("photo produit non servie");
+  });
+  await step("Déconnexion", async () => { await club.goto(`${BASE}/club`); await club.getByRole("button", { name: "Se déconnecter" }).last().click(); await club.waitForURL(BASE + "/"); });
 
   // ---------------- ADMIN ----------------
   await step("Back-office LICENGO", async () => {

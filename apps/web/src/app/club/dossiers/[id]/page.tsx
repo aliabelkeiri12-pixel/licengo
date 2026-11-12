@@ -7,6 +7,7 @@ import { getRegistration, computeCompleteness, extrasOf } from "@/server/service
 import { Alert, Card, PageHeader, RegistrationBadge, PaymentBadge, Progress, Badge, formatDate, formatDateTime, Textarea, Input, Field } from "@/components/ui";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { InstallmentsTable } from "@/components/installments-table";
+import { DocThumb } from "@/components/doc-thumb";
 import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction } from "@/app/actions/club";
 
 export const metadata = { title: "Dossier" };
@@ -66,7 +67,7 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
                     {d && (
                       <div className="mt-3 flex flex-wrap items-start gap-4">
                         <a href={`/api/documents/${d.id}`} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-line bg-chalk">
-                          {d.mimeType.startsWith("image/") ? <img src={`/api/documents/${d.id}`} alt={DOCUMENT_LABELS[t]} className="h-28 w-28 object-cover" /> : <span className="grid h-28 w-28 place-items-center text-xs font-bold text-muted">PDF</span>}
+                          <DocThumb id={d.id} alt={DOCUMENT_LABELS[t]} isImage={d.mimeType.startsWith("image/")} />
                         </a>
                         <div className="min-w-0 flex-1 text-xs text-muted">
                           <p>{d.originalName} · {(d.size / 1024).toFixed(0)} Ko · reçu le {formatDate(d.createdAt)}</p>

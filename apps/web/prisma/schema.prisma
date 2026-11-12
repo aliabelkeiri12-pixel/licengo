@@ -496,6 +496,9 @@ model Product {
   priceCents  Int
   costCents   Int?
   imageUrl    String?
+  /// product photo uploaded by the club (small JPEG, stored in DB so it survives redeploys)
+  imageData   Bytes?
+  imageMime   String?
   active      Boolean         @default(true)
   createdAt   DateTime        @default(now())
   variants    ProductVariant[]
@@ -655,4 +658,11 @@ model ClubFee {
   createdAt   DateTime @default(now())
 
   @@index([clubId])
+}
+
+/// Encrypted blobs when STORAGE_DRIVER=database (free hosting without a persistent disk).
+model StoredObject {
+  key       String   @id
+  data      Bytes
+  createdAt DateTime @default(now())
 }

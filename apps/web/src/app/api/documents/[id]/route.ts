@@ -17,6 +17,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       },
     });
   } catch (e) {
+    if ((e as { code?: string }).code === "ENOENT")
+      return NextResponse.json({ error: "Fichier indisponible : demandez à la famille de le renvoyer" }, { status: 404 });
     const status = e instanceof AppError ? e.status : 500;
     return NextResponse.json({ error: e instanceof AppError ? e.message : "Erreur" }, { status });
   }

@@ -75,7 +75,7 @@ export async function resetDemoAction(_: ActionState, fd: FormData): Promise<Act
     if (str(fd, "confirm") !== "REINITIALISER") return { error: "Tapez REINITIALISER pour confirmer" };
     const keep = await prisma.user.findMany({ where: { role: "ADMIN", email: { not: "admin@licengo.fr" } }, select: { email: true, passwordHash: true, firstName: true, lastName: true } });
     const { seedDemo } = await import("@/server/demo-seed");
-    await seedDemo(prisma);
+    await seedDemo(prisma as unknown as Parameters<typeof seedDemo>[0]);
     await prisma.user.deleteMany({ where: { email: "admin@licengo.fr" } }); // public demo password
     for (const u of keep) await prisma.user.create({ data: { ...u, role: "ADMIN", termsAcceptedAt: new Date() } });
     const { rm } = await import("node:fs/promises");

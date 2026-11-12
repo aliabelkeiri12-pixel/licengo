@@ -4,7 +4,7 @@ import { formatEUR } from "@licengo/core";
 import { prisma } from "@/server/db";
 import { getCurrentUser } from "@/server/auth";
 import { PageHeader, Card, LinkButton } from "@/components/ui";
-import { ProductArt } from "@/components/product-art";
+import { ProductVisual } from "@/components/product-visual";
 import { AddToCart } from "./add-to-cart";
 
 export default async function Shop({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ cat?: string }> }) {
@@ -24,7 +24,7 @@ export default async function Shop({ params, searchParams }: { params: Promise<{
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {club.products.map((p) => (
           <Card key={p.id} className="flex flex-col p-4">
-            <ProductArt category={p.category} color={club.primaryColor} />
+            <ProductVisual product={p} color={club.primaryColor} />
             <div className="mt-4 flex items-start justify-between gap-2"><p className="font-bold">{p.name}</p><p className="font-display text-lg font-extrabold">{formatEUR(p.priceCents)}</p></div>
             <p className="mt-1 flex-1 text-sm text-muted">{p.description}</p>
             <div className="mt-4">{user ? <AddToCart variants={p.variants.map((v) => ({ id: v.id, size: v.size, stock: v.stock }))} personalizable={p.category === "MAILLOT"} /> : <LinkButton href={`/connexion?next=/boutique/${slug}`} variant="outline" className="w-full">Se connecter pour commander</LinkButton>}</div>

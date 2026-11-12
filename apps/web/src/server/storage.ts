@@ -29,7 +29,21 @@ class LocalDriver implements StorageDriver {
   async remove(key: string) { await unlink(this.file(key)).catch(() => undefined); }
 }
 
-const driver: StorageDriver = new LocalDriver();
+/** Database driver: blobs (already encrypted) in PostgreSQL – for hosting without a persistent disk. */
+class DatabaseDriver implements StorageDriver {
+  private db = async () => (await import("./db")).prisma;
+  async put(key: string, data: Buffer) { await (await this.db()).storedObject.upsert({ where: { key }, create: { key, data: new Uint8Array(data) }, update: { data: new Uint8Array(data) } }); }
+  async get(key: string) {
+    const o = await (await this.db()).storedObject.findUnique({ where: { key } });
+    if (!o) throw Object.assign(new Error("Fichier introuvable"), { code: "ENOENT" });
+    return Buffer.from(o.data);
+  }
+  async remove(key: string) { await (await this.db()).storedObject.deleteMany({ where: { key } }); }
+}
+
+/** STORAGE_DRIVER=database|local. On Render without a disk (STORAGE_DIR under /tmp), files go to the database. */
+const useDatabase = process.env.STORAGE_DRIVER === "database" || (process.env.STORAGE_DRIVER !== "local" && process.env.RENDER === "true" && (process.env.STORAGE_DIR ?? "").startsWith("/tmp"));
+const driver: StorageDriver = useDatabase ? new DatabaseDriver() : new LocalDriver();
 
 export function encrypt(plain: Buffer): Buffer {
   const iv = randomBytes(12);
