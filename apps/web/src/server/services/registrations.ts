@@ -104,6 +104,17 @@ export async function createRegistration(user: SessionUser, childId: string, cat
   if (category.club.status !== "ACTIVE") throw new AppError("Ce club n'accepte pas encore les inscriptions en ligne");
   if (category.capacity && category._count.registrations >= category.capacity) throw new AppError("Catégorie complète – contactez le club pour la liste d'attente");
   const existing = await prisma.registration.findUnique({ where: { childId_clubId_season: { childId, clubId: category.clubId, season: category.season } } });
+  if (existing && existing.status === "CANCELLED") {
+    // the family re-registers after cancelling: reopen the same file with the chosen category and supplements
+    const extras = await selectExtras(category.clubId, optionalExtraIds);
+    const reopened = await prisma.registration.update({
+      where: { id: existing.id },
+      data: { status: "DRAFT", categoryId, extras, licenseFeeCents: category.priceCents + extras.reduce((t, e) => t + e.amountCents, 0), decisionReason: null },
+    });
+    await event(existing.id, user.id, "CREATED", "Inscription relancée par la famille");
+    await recompute(existing.id);
+    return reopened;
+  }
   if (existing) return existing;
   const previous = await prisma.registration.findFirst({ where: { childId, clubId: category.clubId, status: "VALIDATED" }, orderBy: { createdAt: "desc" } });
   const extras = await selectExtras(category.clubId, optionalExtraIds);

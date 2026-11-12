@@ -329,3 +329,17 @@ describe("refus par erreur puis réouverture", () => {
     expect((await getRegistration(reg.id)).status).toBe("SUBMITTED");
   });
 });
+
+describe("réinscription après annulation", () => {
+  it("rouvre le dossier annulé au lieu de bloquer la famille", async () => {
+    const { createRegistration, cancelRegistration } = await import("@/server/services/registrations");
+    const fam = await prisma.family.findFirstOrThrow({ where: { guardians: { some: { id: family.id } } } });
+    const start = Number((await prisma.category.findUniqueOrThrow({ where: { id: u11Id } })).season.slice(0, 4));
+    const kid = await prisma.child.create({ data: { familyId: fam.id, firstName: "Max", lastName: "Test", birthDate: new Date(Date.UTC(start - 10, 7, 1)), gender: "M" } });
+    const reg = await createRegistration(family as never, kid.id, u11Id);
+    await cancelRegistration(family as never, reg.id);
+    const again = await createRegistration(family as never, kid.id, u11Id);
+    expect(again.id).toBe(reg.id);
+    expect(again.status).toBe("DRAFT");
+  });
+});
