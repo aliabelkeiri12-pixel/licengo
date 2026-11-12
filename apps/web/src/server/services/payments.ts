@@ -7,7 +7,7 @@ import { notify, notifyClubStaff } from "../notify";
 import { audit } from "../audit";
 import { env } from "../env";
 import type { SessionUser } from "../auth";
-import { assertFamilyAccess } from "./registrations";
+import { assertFamilyAccess, computeCompleteness } from "./registrations";
 
 const MAX_ATTEMPTS = 3;
 const RETRY_DAYS = 3;
@@ -15,6 +15,10 @@ const RETRY_DAYS = 3;
 export async function startLicensePayment(user: SessionUser, registrationId: string, installmentsCount: number) {
   const r = await assertFamilyAccess(user, registrationId);
   if (["REJECTED", "CANCELLED"].includes(r.status)) throw new AppError("Dossier clôturé");
+  // Payment is only possible once the file is complete (documents, health questionnaire, signatures, coherent data)
+  const completeness = await computeCompleteness(r);
+  if (completeness.state !== "COMPLETE")
+    throw new AppError(`Complétez d'abord le dossier avant de payer : ${completeness.summary.join(" · ")}`);
   if (r.paymentStatus === "PAID" || r.paymentStatus === "PARTIAL") throw new AppError("Cette licence est déjà réglée ou en cours de paiement");
   if (installmentsCount > r.category.maxInstallments) throw new AppError(`Le club autorise au maximum ${r.category.maxInstallments} échéances`);
   const provider = paymentProvider();

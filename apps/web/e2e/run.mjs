@@ -62,6 +62,8 @@ try {
     await page.click("text=Commencer l'inscription");
     await page.waitForURL(/\/famille\/inscriptions\/\w+/);
     await expectText(page, "Dossier de Noah");
+    await page.getByTestId("payment-locked").waitFor(); // pas de paiement possible tant que le dossier est incomplet
+    if (await page.getByRole("button", { name: /Payer/ }).count()) throw new Error("bouton Payer visible sur un dossier incomplet");
   });
   await step("Envoi des documents (photo + pièce d'identité)", async () => {
     await page.setInputFiles('[data-testid="file-PHOTO"]', path.join(tmp, "photo.png"));

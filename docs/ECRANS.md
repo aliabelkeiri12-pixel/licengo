@@ -11,6 +11,7 @@ Captures générées automatiquement par le scénario E2E (`apps/web/e2e/run.mjs
 | Clubs | Page club, catégories, choix de l'enfant | `ecrans/05-page-club.png` |
 | Inscription / documents | Signature électronique | `ecrans/06-signature.png` |
 | Inscription | Dossier complet transmis | `ecrans/07-dossier-complet.png` |
+| Paiement | Paiement verrouillé tant que le dossier est incomplet | `ecrans/15-paiement-verrouille.png` |
 | Paiement | Choix 1×–4× et échéancier | `ecrans/08-paiement-echeancier.png` |
 | Paiement | Page de paiement (répartition club / LICENGO) | `ecrans/09-page-paiement.png` |
 | Boutique | Boutique du club | `ecrans/10-boutique.png` |

@@ -135,7 +135,9 @@ export default function RegistrationScreen() {
       <Text style={{ fontWeight: "800", fontSize: 18, marginVertical: 8 }}>Paiement</Text>
       {payment ? (
         <Card>{payment.installments.map((i) => <View key={i.index} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 }}><Text>Échéance {i.index} · {new Date(i.dueDate).toLocaleDateString("fr-FR")}</Text><Text style={{ fontWeight: "700" }}>{formatEUR(i.amountCents)} {i.status === "PAID" ? "✓" : ""}</Text></View>)}</Card>
-      ) : ["REJECTED", "CANCELLED"].includes(r.status) ? null : (
+      ) : ["REJECTED", "CANCELLED"].includes(r.status) ? null : r.completeness.state !== "COMPLETE" ? (
+        <Card><Text style={{ fontWeight: "700" }}>🔒 Le paiement s'ouvrira dès que le dossier sera complet.</Text>{r.completeness.summary.map((m) => <Muted key={m}>• {m}</Muted>)}</Card>
+      ) : (
         <Card>
           <View style={{ flexDirection: "row", gap: 8 }}>
             {Array.from({ length: r.category.maxInstallments }, (_, i) => i + 1).map((k) => (

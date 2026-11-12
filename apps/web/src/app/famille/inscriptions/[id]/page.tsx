@@ -118,7 +118,15 @@ export default async function RegistrationPage({ params, searchParams }: { param
             {payment ? (
               <div className="mt-3"><p className="mb-2 text-sm text-muted">Total {formatEUR(payment.totalCents)} en {payment.installmentsCount}×</p><InstallmentsTable installments={payment.installments} total={payment.installmentsCount} canRetry /></div>
             ) : ["REJECTED", "CANCELLED"].includes(r.status) ? <p className="mt-2 text-sm text-muted">Aucun paiement requis.</p> : (
-              <div className="mt-4"><InstallmentPicker registrationId={r.id} licenseCents={r.licenseFeeCents} feeCents={r.platformFeeCents} max={r.category.maxInstallments} /></div>
+              c.state === "COMPLETE" ? (
+                <div className="mt-4"><InstallmentPicker registrationId={r.id} licenseCents={r.licenseFeeCents} feeCents={r.platformFeeCents} max={r.category.maxInstallments} /></div>
+              ) : (
+                <div className="mt-3 rounded-xl bg-chalk p-4 text-sm" data-testid="payment-locked">
+                  <p className="font-semibold">🔒 Le paiement s'ouvrira dès que le dossier sera complet.</p>
+                  <p className="mt-1 text-muted">Il reste à faire :</p>
+                  <ul className="mt-1 list-inside list-disc text-muted">{c.summary.map((m) => <li key={m}>{m}</li>)}</ul>
+                </div>
+              )
             )}
           </Card>
           {hasNext && (

@@ -51,6 +51,12 @@ describe("parcours complet licence", () => {
     expect(again.id).toBe(r.id);
   });
 
+  it("refuse le paiement tant que le dossier est incomplet", async () => {
+    const { startLicensePayment } = await import("@/server/services/payments");
+    await expect(startLicensePayment(family as never, regId, 1)).rejects.toThrow("Complétez d'abord le dossier");
+    expect(await prisma.payment.count({ where: { registrationId: regId } })).toBe(0);
+  });
+
   it("refuse l'accès au dossier d'une autre famille", async () => {
     const { assertFamilyAccess } = await import("@/server/services/registrations");
     const other = { ...family, familyId: "autre" };
@@ -155,6 +161,13 @@ describe("impayés", () => {
     const c2 = await prisma.child.create({ data: { familyId: fam.id, firstName: "Inès", lastName: "Test", birthDate: new Date(Date.UTC(start - 12, 1, 1)), gender: "F" } });
     const u13 = await prisma.category.findFirstOrThrow({ where: { clubId, name: "U13" } });
     const reg = await createRegistration(family as never, c2.id, u13.id);
+    // complete the file first: payment is only possible on a complete file
+    const { uploadDocument } = await import("@/server/services/documents");
+    const { setHealthAnswer, signDocument } = await import("@/server/services/registrations");
+    await uploadDocument(family as never, { childId: c2.id, type: "PHOTO", file: file(PNG, "p.png", "image/png") });
+    await uploadDocument(family as never, { childId: c2.id, type: "ID_DOCUMENT", file: file(JPEG, "id.jpg", "image/jpeg") });
+    await setHealthAnswer(family as never, reg.id, "ALL_NO");
+    for (const t of ["CLUB_RULES", "PARENTAL_AUTHORIZATION", "HEALTH_QUESTIONNAIRE"] as const) await signDocument(family as never, reg.id, t, { signerName: "Paul Test", accepted: true });
     const { paymentId } = await startLicensePayment(family as never, reg.id, 2);
     const inst = await prisma.installment.findMany({ where: { paymentId }, orderBy: { index: "asc" } });
     await markInstallmentPaid(inst[0].id, { customerId: "cus", paymentMethodId: "pm_mock_faillater_1" });
