@@ -1,10 +1,12 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { toCents } from "@licengo/core";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { audit } from "@/server/audit";
+import { AppError } from "@/server/errors";
 import { notifyClubStaff } from "@/server/notify";
 import { refundPayment } from "@/server/services/payments";
 import { safe } from "@/lib/safe-action";
@@ -60,4 +62,26 @@ export async function revokeSessionsAction(fd: FormData) {
   await prisma.session.deleteMany({ where: { userId: str(fd, "userId") } });
   await audit(admin.id, "admin.sessions_revoke", "User", str(fd, "userId"));
   revalidatePath("/admin/utilisateurs");
+}
+
+/**
+ * Demo only (DEMO_DATA=1): wipes everything created during presentations (accounts, files, photos,
+ * documents, payments, orders) and reloads the original demo data. LICENGO admin accounts are kept.
+ */
+export async function resetDemoAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const admin = await requireUser("ADMIN");
+    if (process.env.DEMO_DATA !== "1") throw new AppError("Réinitialisation réservée au site de démonstration");
+    if (str(fd, "confirm") !== "REINITIALISER") return { error: "Tapez REINITIALISER pour confirmer" };
+    const keep = await prisma.user.findMany({ where: { role: "ADMIN", email: { not: "admin@licengo.fr" } }, select: { email: true, passwordHash: true, firstName: true, lastName: true } });
+    const { seedDemo } = await import("@/server/demo-seed");
+    await seedDemo(prisma);
+    await prisma.user.deleteMany({ where: { email: "admin@licengo.fr" } }); // public demo password
+    for (const u of keep) await prisma.user.create({ data: { ...u, role: "ADMIN", termsAcceptedAt: new Date() } });
+    const { rm } = await import("node:fs/promises");
+    const path = await import("node:path");
+    await rm(path.resolve(process.env.STORAGE_DIR || "./storage"), { recursive: true, force: true }); // uploaded photos & documents
+    await audit(null, "admin.demo_reset", "Platform", undefined, { by: admin.email });
+    redirect("/connexion?reinitialise=1");
+  });
 }
