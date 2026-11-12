@@ -27,6 +27,12 @@ export function InstallmentPicker({ registrationId, licenseCents, feeCents, max 
         ))}
         <li className="flex justify-between border-t border-line pt-1.5 font-bold"><span>Total</span><span>{formatEUR(plan.totalCents)}</span></li>
       </ol>
+      {n > 1 && (
+        <label className="flex items-start gap-3 rounded-xl border border-line p-3 text-xs leading-relaxed">
+          <input type="checkbox" name="balanceClause" required className="mt-0.5 h-4 w-4 shrink-0 accent-pitch-700" data-testid="balance-clause" />
+          <span>J'accepte qu'en cas d'échec du prélèvement d'une échéance après 3 tentatives, <b>le solde restant dû soit prélevé en une seule fois</b> sur ma carte, et que le club en soit informé.</span>
+        </label>
+      )}
       <p className="text-xs text-muted">Dont licence {formatEUR(licenseCents)} versée au club et frais de service LICENGO {formatEUR(feeCents)} (inclus dans la 1re échéance).</p>
       <SubmitButton variant="volt" size="lg" className="w-full">Payer {formatEUR(plan.installments[0].amountCents)} par carte</SubmitButton>
       <p className="text-center text-[11px] text-muted">🔒 Paiement sécurisé 3-D Secure — vos données bancaires ne transitent jamais par LICENGO.</p>

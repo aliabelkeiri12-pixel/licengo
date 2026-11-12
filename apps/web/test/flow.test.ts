@@ -122,7 +122,8 @@ describe("parcours complet licence", () => {
 
   it("paiement en 3× : 54,99 € puis 2 × 50 €, prélèvements automatiques", async () => {
     const { startLicensePayment, markInstallmentPaid, runDueInstallments } = await import("@/server/services/payments");
-    const { paymentId } = await startLicensePayment(family as never, regId, 3);
+    await expect(startLicensePayment(family as never, regId, 3)).rejects.toThrow("clause");
+    const { paymentId } = await startLicensePayment(family as never, regId, 3, { acceptBalanceClause: true });
     const p = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId }, include: { installments: { orderBy: { index: "asc" } } } });
     expect(p.installments.map((i) => i.amountCents)).toEqual([5499, 5000, 5000]);
     expect(p.clubAmountCents).toBe(15000);
@@ -139,11 +140,25 @@ describe("parcours complet licence", () => {
     expect(receipts[0].text).toContain("Paiement de démonstration");
     expect(receipts[0].text).toContain("Prochaines échéances");
     expect(receipts[0].html).toContain("<b style=\"color:#0E1512\">FC Test</b>");
+    // invoices: club invoices the membership fee, LICENGO its service fee (VAT included), sequential numbers
+    const invs = await prisma.invoice.findMany({ where: { paymentId }, orderBy: { issuer: "asc" } });
+    expect(invs.map((i) => [i.issuer, i.amountCents, i.vatCents])).toEqual([["CLUB", 5000, 0], ["PLATFORM", 499, 83]]);
+    expect(invs[0].number).toMatch(/^FCTEST-\d{4}-00001$/);
+    expect(invs[1].number).toMatch(/^LG-\d{4}-00001$/);
+    expect(receipts[0].attachments?.map((a: { name: string }) => a.name)).toEqual([`facture-${invs[0].number}.pdf`, `facture-${invs[1].number}.pdf`]);
+    const { renderInvoicePdf, canReadInvoice } = await import("@/server/invoices");
+    const { pdf } = await renderInvoicePdf(invs[1].id);
+    expect(Buffer.from(pdf).subarray(0, 5).toString()).toBe("%PDF-");
+    expect(canReadInvoice(family as never, invs[1])).toBe(true);
+    expect(canReadInvoice(staff as never, invs[0])).toBe(true);
+    expect(canReadInvoice(staff as never, invs[1])).toBe(false); // LICENGO invoice is private between family and LICENGO
     expect((await prisma.registration.findUniqueOrThrow({ where: { id: regId } })).paymentStatus).toBe("PARTIAL");
     await expect(startLicensePayment(family as never, regId, 1)).rejects.toThrow();
     const far = new Date(Date.now() + 70 * 86400_000);
     const res = await runDueInstallments(far);
-    expect(res).toEqual({ charged: 2, failed: 0 });
+    expect(res).toMatchObject({ charged: 2, failed: 0 });
+    expect(await prisma.invoice.count({ where: { paymentId } })).toBe(4); // 2 + one club invoice per later installment
+    expect((await prisma.invoice.findMany({ where: { paymentId, issuer: "CLUB" }, orderBy: { number: "asc" } })).map((i) => i.number.slice(-5))).toEqual(["00001", "00002", "00003"]);
     expect(((globalThis as { __sentMails?: { subject: string }[] }).__sentMails ?? []).filter((m) => m.subject.startsWith("Votre reçu LICENGO")).length).toBe(3); // one receipt per installment
     expect((await prisma.registration.findUniqueOrThrow({ where: { id: regId } })).paymentStatus).toBe("PAID");
     expect((await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })).status).toBe("COMPLETED");
@@ -179,11 +194,11 @@ describe("impayés", () => {
     await uploadDocument(family as never, { childId: c2.id, type: "ID_DOCUMENT", file: file(JPEG, "id.jpg", "image/jpeg") });
     await setHealthAnswer(family as never, reg.id, "ALL_NO");
     for (const t of ["CLUB_RULES", "PARENTAL_AUTHORIZATION", "HEALTH_QUESTIONNAIRE"] as const) await signDocument(family as never, reg.id, t, { signerName: "Paul Test", accepted: true });
-    const { paymentId } = await startLicensePayment(family as never, reg.id, 2);
+    const { paymentId } = await startLicensePayment(family as never, reg.id, 2, { acceptBalanceClause: true });
     const inst = await prisma.installment.findMany({ where: { paymentId }, orderBy: { index: "asc" } });
     await markInstallmentPaid(inst[0].id, { customerId: "cus", paymentMethodId: "pm_mock_faillater_1" });
     const d = new Date(Date.now() + 40 * 86400_000);
-    expect(await runDueInstallments(d)).toEqual({ charged: 0, failed: 1 });
+    expect(await runDueInstallments(d)).toMatchObject({ charged: 0, failed: 1 });
     expect((await prisma.registration.findUniqueOrThrow({ where: { id: reg.id } })).paymentStatus).toBe("LATE");
     expect(await prisma.notification.count({ where: { userId: staff.id, type: "PAYMENT_FAILED" } })).toBe(1);
     // relances à J+3, J+6 puis arrêt
@@ -194,6 +209,15 @@ describe("impayés", () => {
     await prisma.installment.update({ where: { id: inst[1].id }, data: { updatedAt: new Date(Date.now() - 4 * 86400_000) } });
     expect((await runDueInstallments(d)).failed).toBe(0);
     expect((await prisma.installment.findUniqueOrThrow({ where: { id: inst[1].id } })).attempts).toBe(3);
+    // balance clause: after the 3rd failure the remaining balance was claimed once (and failed with this card)
+    const pay = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
+    expect(pay.balanceClaimedAt).not.toBeNull();
+    expect(await prisma.notification.count({ where: { userId: family.id, type: "BALANCE_FAILED" } })).toBe(1);
+    // the family updates its card → the balance claim succeeds and the file is paid
+    const { claimRemainingBalance } = await import("@/server/services/payments");
+    await prisma.payment.update({ where: { id: paymentId }, data: { providerPaymentMethodId: "pm_mock_ok" } });
+    expect(await claimRemainingBalance(paymentId)).toMatchObject({ status: "succeeded" });
+    expect((await prisma.registration.findUniqueOrThrow({ where: { id: reg.id } })).paymentStatus).toBe("PAID");
   });
 
   it("relances automatiques des dossiers incomplets", async () => {

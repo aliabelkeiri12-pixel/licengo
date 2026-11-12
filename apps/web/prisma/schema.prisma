@@ -420,11 +420,15 @@ model Payment {
   providerCustomerId String?
   providerPaymentMethodId String?
   checkoutSessionId String?
+  /// Family accepted that, after repeated failed installments, the whole remaining balance is charged
+  balanceClauseAcceptedAt DateTime?
+  balanceClaimedAt  DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
   installments Installment[]
   refunds      Refund[]
+  invoices     Invoice[]
 
   @@index([clubId])
   @@index([payerId])
@@ -609,4 +613,34 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+}
+
+enum InvoiceIssuer {
+  CLUB
+  PLATFORM
+}
+
+/// One invoice per paid installment and issuer: the club invoices the membership fee,
+/// LICENGO invoices its service fee (VAT included).
+model Invoice {
+  id            String        @id @default(cuid())
+  number        String        @unique
+  issuer        InvoiceIssuer
+  paymentId     String
+  payment       Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  installmentId String
+  clubId        String
+  payerId       String
+  amountCents   Int // total incl. VAT
+  vatCents      Int           @default(0)
+  issuedAt      DateTime      @default(now())
+
+  @@unique([installmentId, issuer])
+  @@index([payerId])
+}
+
+/// Gap-free invoice numbering per issuer and year (legal requirement).
+model InvoiceCounter {
+  key   String @id // "CLUB:<clubId>:2026" | "PLATFORM:2026"
+  value Int    @default(0)
 }

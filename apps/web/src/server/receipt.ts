@@ -1,6 +1,7 @@
 import { formatEUR } from "@licengo/core";
 import { prisma } from "./db";
-import { sendMail, appLink } from "./mail";
+import { sendMail, appLink, type MailAttachment } from "./mail";
+import { renderInvoicePdf } from "./invoices";
 
 export interface ReceiptData {
   number: string;
@@ -40,7 +41,7 @@ export function buildReceiptEmail(r: ReceiptData) {
     ...(r.installment?.remaining.length ? ["", "Prochaines échéances :", ...r.installment.remaining.map((x) => `  ${day(x.dueDate)} : ${formatEUR(x.amountCents)}`)] : []),
     "",
     r.simulated ? "⚠ Paiement de démonstration : aucune somme n'a été réellement débitée." : "Paiement par carte bancaire sécurisé (Stripe).",
-    `Retrouvez vos paiements : ${r.link}`,
+    `Vos factures sont jointes à cet email et disponibles dans « Mes paiements » : ${r.link}`,
     "",
     "LICENGO",
   ].join("\n");
@@ -124,7 +125,10 @@ export async function sendPaymentReceipt(installmentId: string): Promise<boolean
       simulated: p.provider === "mock",
       link,
     });
-    return await sendMail(payer.email, mail.subject, mail.text, mail.html);
+    const invoices = await prisma.invoice.findMany({ where: { installmentId: inst.id }, orderBy: { issuer: "asc" } });
+    const attachments: MailAttachment[] = [];
+    for (const i of invoices) attachments.push({ name: `facture-${i.number}.pdf`, content: (await renderInvoicePdf(i.id)).pdf });
+    return await sendMail(payer.email, mail.subject, mail.text, mail.html, attachments);
   } catch (e) {
     console.error("receipt failed", e);
     return false;

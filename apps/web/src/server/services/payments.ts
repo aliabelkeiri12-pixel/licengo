@@ -7,19 +7,25 @@ import { notify, notifyClubStaff } from "../notify";
 import { audit } from "../audit";
 import { env } from "../env";
 import { sendPaymentReceipt } from "../receipt";
+import { issueInvoices } from "../invoices";
 import type { SessionUser } from "../auth";
 import { assertFamilyAccess, computeCompleteness } from "./registrations";
 
 const MAX_ATTEMPTS = 3;
 const RETRY_DAYS = 3;
 
-export async function startLicensePayment(user: SessionUser, registrationId: string, installmentsCount: number) {
+export const BALANCE_CLAUSE =
+  "J'accepte qu'en cas d'échec du prélèvement d'une échéance après 3 tentatives, le solde restant dû soit prélevé en une seule fois sur ma carte, et que le club en soit informé.";
+
+export async function startLicensePayment(user: SessionUser, registrationId: string, installmentsCount: number, opts: { acceptBalanceClause?: boolean } = {}) {
   const r = await assertFamilyAccess(user, registrationId);
   if (["REJECTED", "CANCELLED"].includes(r.status)) throw new AppError("Dossier clôturé");
   // Payment is only possible once the file is complete (documents, health questionnaire, signatures, coherent data)
   const completeness = await computeCompleteness(r);
   if (completeness.state !== "COMPLETE")
     throw new AppError(`Complétez d'abord le dossier avant de payer : ${completeness.summary.join(" · ")}`);
+  if (installmentsCount > 1 && !opts.acceptBalanceClause)
+    throw new AppError("Pour payer en plusieurs fois, vous devez accepter la clause de prélèvement du solde en cas d'impayé");
   if (r.paymentStatus === "PAID" || r.paymentStatus === "PARTIAL") throw new AppError("Cette licence est déjà réglée ou en cours de paiement");
   if (installmentsCount > r.category.maxInstallments) throw new AppError(`Le club autorise au maximum ${r.category.maxInstallments} échéances`);
   const provider = paymentProvider();
@@ -30,6 +36,7 @@ export async function startLicensePayment(user: SessionUser, registrationId: str
   const plan = buildLicenseCheckout(r.licenseFeeCents, installmentsCount, r.platformFeeCents);
   const payment = await prisma.payment.create({
     data: {
+      balanceClauseAcceptedAt: installmentsCount > 1 ? new Date() : null,
       kind: "LICENSE", registrationId, clubId: r.clubId, payerId: user.id, provider: provider.name,
       totalCents: plan.totalCents, clubAmountCents: plan.licenseCents, platformFeeCents: plan.platformFeeCents, installmentsCount,
       installments: { create: plan.installments.map((i) => ({ index: i.index, dueDate: i.dueDate, amountCents: i.amountCents, clubAmountCents: i.clubAmountCents, platformFeeCents: i.platformFeeCents })) },
@@ -87,7 +94,8 @@ export async function markInstallmentPaid(installmentId: string, info: { intentI
   const p = await refreshAggregates(inst.paymentId);
   await notify(p.payerId, { type: "PAYMENT_SUCCEEDED", title: "Paiement confirmé", body: `${formatEUR(inst.amountCents)} – échéance ${inst.index}/${p.installmentsCount}`, link: "/famille/paiements" });
   await audit(null, "installment.paid", "Installment", inst.id, { amount: inst.amountCents });
-  await sendPaymentReceipt(inst.id); // receipt / invoice e-mailed to the payer account (never blocks the payment)
+  await issueInvoices(inst.id).catch((e) => console.error("invoice failed", e));
+  await sendPaymentReceipt(inst.id); // receipt + PDF invoices e-mailed to the payer account (never blocks the payment)
   return inst;
 }
 
@@ -117,7 +125,7 @@ export async function runDueInstallments(now = new Date()) {
     include: { payment: { include: { club: true } } },
     take: 500,
   });
-  const res = { charged: 0, failed: 0 };
+  const res = { charged: 0, failed: 0, balanceCharged: 0, balanceFailed: 0 };
   for (const inst of due) {
     // optimistic lock: only one worker processes an installment
     const locked = await prisma.installment.updateMany({ where: { id: inst.id, status: inst.status, updatedAt: inst.updatedAt }, data: { status: "PROCESSING" } });
@@ -128,10 +136,46 @@ export async function runDueInstallments(now = new Date()) {
       paymentMethodId: inst.payment.providerPaymentMethodId, description: `Échéance ${inst.index}/${inst.payment.installmentsCount}`,
     });
     if (r.status === "succeeded") { await markInstallmentPaid(inst.id, { intentId: r.intentId }); res.charged++; }
-    else if (r.status === "failed") { await prisma.installment.update({ where: { id: inst.id }, data: { status: inst.status } }); await markInstallmentFailed(inst.id, r.reason, r.intentId); res.failed++; }
+    else if (r.status === "failed") {
+      await prisma.installment.update({ where: { id: inst.id }, data: { status: inst.status } });
+      await markInstallmentFailed(inst.id, r.reason, r.intentId);
+      res.failed++;
+      const after = await prisma.installment.findUniqueOrThrow({ where: { id: inst.id } });
+      if (after.attempts >= MAX_ATTEMPTS && inst.payment.balanceClauseAcceptedAt && !inst.payment.balanceClaimedAt) {
+        const claim = await claimRemainingBalance(inst.paymentId);
+        if (claim.status === "succeeded") res.balanceCharged++; else res.balanceFailed++;
+      }
+    }
     else await prisma.installment.update({ where: { id: inst.id }, data: { providerPaymentIntentId: r.intentId } });
   }
   return res;
+}
+
+/**
+ * Balance clause ("déchéance du terme"), only if the family accepted it at checkout:
+ * after the last failed attempt, the whole remaining balance is charged once, off-session.
+ */
+export async function claimRemainingBalance(paymentId: string): Promise<{ status: "succeeded" | "failed"; amountCents: number }> {
+  const p = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId }, include: { club: true, installments: { orderBy: { index: "asc" } }, registration: { include: { child: true } } } });
+  const due = p.installments.filter((i) => ["SCHEDULED", "FAILED"].includes(i.status));
+  const amountCents = due.reduce((s, i) => s + i.amountCents, 0);
+  await prisma.payment.update({ where: { id: p.id }, data: { balanceClaimedAt: new Date() } });
+  if (!due.length) return { status: "succeeded", amountCents: 0 };
+  const who = p.registration ? `${p.registration.child.firstName} ${p.registration.child.lastName}` : "";
+  const r = await paymentProvider().chargeOffSession({
+    installmentId: due[0].id, amountCents, platformFeeCents: due.reduce((s, i) => s + i.platformFeeCents, 0),
+    clubStripeAccountId: p.club.stripeAccountId, customerId: p.providerCustomerId, paymentMethodId: p.providerPaymentMethodId,
+    description: `Solde restant dû${who ? ` – ${who}` : ""}`,
+  });
+  if (r.status === "succeeded") {
+    for (const i of due) await markInstallmentPaid(i.id, { intentId: i === due[0] ? r.intentId : undefined });
+    await notifyClubStaff(p.clubId, { type: "BALANCE_CHARGED", title: "Solde prélevé", body: `${who} : solde de ${formatEUR(amountCents)} prélevé après impayé`, link: "/club/paiements" });
+  } else {
+    await notify(p.payerId, { type: "BALANCE_FAILED", title: "Solde impayé", body: `Le solde de ${formatEUR(amountCents)} n'a pas pu être prélevé. Régularisez depuis « Mes paiements » pour conserver l'inscription.`, link: "/famille/paiements" });
+    await notifyClubStaff(p.clubId, { type: "BALANCE_FAILED", title: "Solde impayé", body: `${who} : le solde de ${formatEUR(amountCents)} n'a pas pu être prélevé`, link: "/club/paiements" });
+  }
+  await audit(null, "payment.balance_claim", "Payment", p.id, { amountCents, status: r.status });
+  return { status: r.status === "succeeded" ? "succeeded" : "failed", amountCents };
 }
 
 /** Refund (club treasurer or LICENGO admin). Refunds latest paid installments first; scheduled ones are cancelled on full refund. */

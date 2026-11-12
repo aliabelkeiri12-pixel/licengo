@@ -94,6 +94,7 @@ try {
   await step("Paiement en 3 fois (54,99 € aujourd'hui)", async () => {
     await page.getByRole("radio", { name: /3×/ }).click();
     await expectText(page, "54,99");
+    await page.getByTestId("balance-clause").check();
     await shot(page, "08-paiement-echeancier");
     await page.getByRole("button", { name: /Payer 54,99/ }).click();
     await page.waitForURL("**/paiement/simulation/**");
@@ -101,6 +102,16 @@ try {
     await page.click('button[type="submit"]');
     await page.waitForURL("**paiement=ok**");
     await expectText(page, "Paiement confirmé");
+  });
+  await step("Mes paiements : échéances et factures PDF", async () => {
+    await page.goto(`${BASE}/famille/paiements`);
+    await expectText(page, "Toutes mes factures");
+    const links = page.getByTestId("invoice-link");
+    if ((await links.count()) < 2) throw new Error("factures club + LICENGO attendues");
+    const href = await links.first().getAttribute("href");
+    const res = await page.request.get(BASE + href);
+    if (res.headers()["content-type"] !== "application/pdf" || !(await res.body()).subarray(0, 5).equals(Buffer.from("%PDF-"))) throw new Error("PDF invalide");
+    await shot(page, "17-mes-paiements");
   });
   await step("Boutique : ajout au panier et commande", async () => {
     await page.goto(`${BASE}/boutique/fc-lyon-est`);

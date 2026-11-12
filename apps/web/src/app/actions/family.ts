@@ -130,7 +130,7 @@ export async function startPaymentAction(_: ActionState, fd: FormData): Promise<
   let url = "";
   const res = await safe(async () => {
     const u = await family();
-    url = (await startLicensePayment(u, str(fd, "registrationId"), installmentsSchema.parse(fd.get("installments")))).url;
+    url = (await startLicensePayment(u, str(fd, "registrationId"), installmentsSchema.parse(fd.get("installments")), { acceptBalanceClause: fd.get("balanceClause") === "on" })).url;
   });
   if (res) return res;
   redirect(url);

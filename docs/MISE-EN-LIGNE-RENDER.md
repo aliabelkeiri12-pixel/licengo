@@ -29,3 +29,7 @@ Testé : l'image `Dockerfile.render` démarre sur une base vide (migrations, off
 4. Dans Render, service `licengo-demo` → **Environment** → ajoutez `BREVO_API_KEY` (la clé) et `MAIL_FROM` (l'adresse validée à l'étape 2), puis **Save changes**.
 
 Sans ces deux valeurs, le site fonctionne mais les emails ne sont pas envoyés.
+
+## Factures
+
+Chaque paiement génère des factures PDF (jointes au reçu et téléchargeables dans « Mes paiements ») : la **cotisation** est facturée au nom du club (TVA non applicable, association), les **frais de service** au nom de LICENGO (TVA 20 % incluse). Renseignez dans Render → Environment : `LICENGO_LEGAL_NAME` (ex. « LICENGO SAS »), `LICENGO_ADDRESS`, `LICENGO_SIREN`, `LICENGO_VAT_NUMBER`. Les mentions légales sont à faire valider par votre expert-comptable.

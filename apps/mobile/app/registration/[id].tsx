@@ -3,7 +3,7 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as WebBrowser from "expo-web-browser";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import SignatureScreen, { type SignatureViewRef } from "react-native-signature-canvas";
 import { buildLicenseCheckout, DOCUMENT_LABELS, SIGNATURE_LABELS, formatEUR, type DocumentType, type SignableDocument } from "@licengo/core";
 import { api } from "@/api";
@@ -28,6 +28,7 @@ export default function RegistrationScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [signing, setSigning] = useState<SignableDocument | null>(null);
   const [n, setN] = useState(1);
+  const [clause, setClause] = useState(false);
   const sigRef = useRef<SignatureViewRef>(null);
   const load = useCallback(() => api<Reg>(`/registrations/${id}`).then(setR).catch((e) => Alert.alert("Erreur", e.message)), [id]);
   useEffect(() => { load(); }, [load]);
@@ -66,7 +67,8 @@ export default function RegistrationScreen() {
   const pay = async () => {
     setBusy("pay");
     try {
-      const { url } = await api<{ url: string }>(`/registrations/${r.id}/pay`, { body: { installments: n } });
+      if (n > 1 && !clause) { Alert.alert("Paiement en plusieurs fois", "Acceptez la clause de prélèvement du solde en cas d'impayé."); return; }
+      const { url } = await api<{ url: string }>(`/registrations/${r.id}/pay`, { body: { installments: n, acceptBalanceClause: n > 1 ? clause : undefined } });
       await WebBrowser.openAuthSessionAsync(url, "licengo://");
       await load();
     } catch (e) { Alert.alert("Paiement", (e as Error).message); } finally { setBusy(null); }
@@ -148,6 +150,12 @@ export default function RegistrationScreen() {
           </View>
           {plan.installments.map((i) => <View key={i.index} style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}><Muted>{i.index === 1 ? "Aujourd'hui" : i.dueDate.toLocaleDateString("fr-FR")}</Muted><Text style={{ fontWeight: "700" }}>{formatEUR(i.amountCents)}</Text></View>)}
           <Muted>Total {formatEUR(plan.totalCents)} dont {formatEUR(r.platformFeeCents)} de frais LICENGO</Muted>
+          {n > 1 ? (
+            <View style={{ flexDirection: "row", gap: 10, alignItems: "center", marginTop: 10 }}>
+              <Switch value={clause} onValueChange={setClause} trackColor={{ true: colors.pitch600 }} />
+              <Text style={{ flex: 1, fontSize: 12, color: colors.ink }}>J'accepte qu'en cas d'échec d'une échéance après 3 tentatives, le solde restant soit prélevé en une fois sur ma carte.</Text>
+            </View>
+          ) : null}
           <Button title={`Payer ${formatEUR(plan.installments[0].amountCents)}`} variant="volt" style={{ marginTop: 12 }} loading={busy === "pay"} onPress={pay} />
         </Card>
       )}

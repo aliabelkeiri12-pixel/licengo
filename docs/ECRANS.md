@@ -18,6 +18,8 @@ Captures générées automatiquement par le scénario E2E (`apps/web/e2e/run.mjs
 | Panier | Panier | `ecrans/11-panier.png` |
 | Commandes | Suivi de commande | `ecrans/12-commande.png` |
 | Paiement | Email de reçu envoyé au payeur | `ecrans/16-email-recu.png` |
+| Paiement | Espace « Mes paiements » (échéances, factures) | `ecrans/17-mes-paiements.png` |
+| Paiement | Factures PDF club et LICENGO | `ecrans/18-factures-pdf.png` |
 | Tableau de bord famille | Accueil famille | `ecrans/13-accueil-famille.png` |
 | Notifications | Centre de notifications | `ecrans/14-notifications.png` |
 | Club | Tableau de bord | `ecrans/20-club-tableau-de-bord.png` |

@@ -37,3 +37,11 @@ services:
         sync: false
       - key: MAIL_FROM # adresse d'expéditeur validée dans Brevo
         sync: false
+      - key: LICENGO_LEGAL_NAME # identité légale imprimée sur les factures de frais de service
+        sync: false
+      - key: LICENGO_ADDRESS
+        sync: false
+      - key: LICENGO_SIREN
+        sync: false
+      - key: LICENGO_VAT_NUMBER
+        sync: false

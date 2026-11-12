@@ -1,15 +1,16 @@
 import { env } from "./env";
 
-export interface Mail { to: string; subject: string; text: string; html?: string }
+export interface MailAttachment { name: string; content: Uint8Array }
+export interface Mail { to: string; subject: string; text: string; html?: string; attachments?: MailAttachment[] }
 
 /**
  * Transactional e-mail through Brevo's HTTP API (French provider, EU hosting; free tier 300 e-mails/day).
  * Variables: BREVO_API_KEY and MAIL_FROM (a sender address verified in Brevo).
  * Without BREVO_API_KEY (dev) the message is logged; in tests it is captured in globalThis.__sentMails.
  */
-export async function sendMail(to: string, subject: string, text: string, html?: string): Promise<boolean> {
+export async function sendMail(to: string, subject: string, text: string, html?: string, attachments: MailAttachment[] = []): Promise<boolean> {
   if (process.env.NODE_ENV === "test") {
-    ((globalThis as { __sentMails?: Mail[] }).__sentMails ??= []).push({ to, subject, text, html });
+    ((globalThis as { __sentMails?: Mail[] }).__sentMails ??= []).push({ to, subject, text, html, attachments });
     return true;
   }
   const key = process.env.BREVO_API_KEY;
@@ -27,6 +28,7 @@ export async function sendMail(to: string, subject: string, text: string, html?:
         subject,
         textContent: text,
         ...(html ? { htmlContent: html } : {}),
+        ...(attachments.length ? { attachment: attachments.map((a) => ({ name: a.name, content: Buffer.from(a.content).toString("base64") })) } : {}),
       }),
       signal: AbortSignal.timeout(10_000),
     });
