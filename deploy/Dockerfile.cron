@@ -1,0 +1,3 @@
+# Tâche planifiée Render : déclenche le prélèvement des échéances et les relances.
+FROM node:22-alpine
+CMD ["node", "-e", "const b='http://'+process.env.APP_INTERNAL_URL,h={Authorization:'Bearer '+process.env.CRON_SECRET};Promise.all(['installments','reminders'].map(j=>fetch(b+'/api/cron/'+j,{method:'POST',headers:h}).then(async r=>console.log(j,r.status,await r.text())))).catch(e=>{console.error(e);process.exit(1)})"]

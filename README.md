@@ -52,4 +52,6 @@ apps/mobile       Expo SDK 58 / React Native : app famille (caméra, signature, 
 docs/             Architecture, sécurité & RGPD, fédérations, déploiement & stores, identité visuelle, écrans
 ```
 
+**Mise en ligne en quelques clics : [docs/MISE-EN-LIGNE-RENDER.md](docs/MISE-EN-LIGNE-RENDER.md)**
+
 Documentation : [Architecture](docs/ARCHITECTURE.md) · [Sécurité & RGPD](docs/SECURITE-RGPD.md) · [Fédérations](docs/FEDERATIONS.md) · [Déploiement & stores](docs/DEPLOIEMENT.md) · [Identité visuelle](docs/IDENTITE-VISUELLE.md) · [Écrans](docs/ECRANS.md) · [Feuille de route](docs/ROADMAP.md)
