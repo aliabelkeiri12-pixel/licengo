@@ -494,3 +494,19 @@ describe("suppression de joueurs (à exécuter en dernier)", () => {
     expect(await prisma.club.count()).toBe(1); // clubs, categories and accounts are kept
   });
 });
+
+describe("remise à zéro des familles (en dernier)", () => {
+  it("efface toutes les familles sauf celle du joueur gardé (comptes, commandes, paiements compris)", async () => {
+    const { purgeFamiliesExcept } = await import("@/server/services/purge");
+    const other = await prisma.family.create({ data: { name: "Famille Autre" } });
+    await prisma.user.create({ data: { email: "autre@test.fr", passwordHash: "x", firstName: "A", lastName: "Autre", familyId: other.id } });
+    await prisma.child.create({ data: { familyId: other.id, firstName: "Tim", lastName: "Autre", birthDate: new Date(Date.UTC(2015, 1, 1)), gender: "M" } });
+    await expect(purgeFamiliesExcept(admin as never, "Inconnu")).rejects.toThrow("aucune famille");
+    const res = await purgeFamiliesExcept(admin as never, "Idriss Dramé");
+    expect(res.families).toBe(1);
+    expect(await prisma.user.findUnique({ where: { email: "autre@test.fr" } })).toBeNull();
+    expect(await prisma.child.count({ where: { firstName: "Idrissa" } })).toBe(1);
+    expect(await prisma.user.count({ where: { role: "FAMILY" } })).toBe(1); // the family of Idrissa
+    expect(await prisma.user.count({ where: { id: { in: [admin.id, staff.id] } } })).toBe(2); // club staff and admins kept
+  });
+});

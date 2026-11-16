@@ -32,6 +32,53 @@ async function deleteRegistrations(regIds: string[], childIds: string[] = []) {
   return { registrations: regIds.length, players: orphans.length };
 }
 
+/** Deletes a family entirely: players, files, payments, shop orders, invoices, guardian accounts. */
+export async function deleteFamilyData(familyId: string) {
+  const children = await prisma.child.findMany({ where: { familyId }, select: { id: true } });
+  const childIds = children.map((c) => c.id);
+  const regs = await prisma.registration.findMany({ where: { childId: { in: childIds } }, select: { id: true } });
+  await deleteRegistrations(regs.map((r) => r.id), childIds);
+  const users = await prisma.user.findMany({ where: { familyId, role: "FAMILY" }, select: { id: true } });
+  const userIds = users.map((u) => u.id);
+  const orders = await prisma.shopOrder.findMany({ where: { userId: { in: userIds } }, select: { id: true } });
+  const pays = await prisma.payment.findMany({ where: { OR: [{ orderId: { in: orders.map((o) => o.id) } }, { payerId: { in: userIds } }] }, select: { id: true } });
+  const payIds = pays.map((p) => p.id);
+  const docs = await prisma.document.findMany({ where: { familyId }, select: { storageKey: true } });
+  await prisma.$transaction([
+    prisma.refund.deleteMany({ where: { paymentId: { in: payIds } } }),
+    prisma.invoice.deleteMany({ where: { paymentId: { in: payIds } } }),
+    prisma.installment.deleteMany({ where: { paymentId: { in: payIds } } }),
+    prisma.payment.deleteMany({ where: { id: { in: payIds } } }),
+    prisma.shopOrder.deleteMany({ where: { id: { in: orders.map((o) => o.id) } } }),
+    prisma.signature.deleteMany({ where: { signerId: { in: userIds } } }),
+    prisma.auditLog.updateMany({ where: { actorId: { in: userIds } }, data: { actorId: null } }),
+    prisma.storedObject.deleteMany({ where: { key: { in: docs.map((d) => d.storageKey) } } }),
+    prisma.user.deleteMany({ where: { id: { in: userIds } } }),
+    prisma.family.deleteMany({ where: { id: familyId } }),
+  ]);
+  return { users: userIds.length, players: childIds.length };
+}
+
+/** Admin: deletes every family except the one(s) of the players to keep. */
+export async function purgeFamiliesExcept(user: SessionUser, keepQuery: string) {
+  const words = norm(keepQuery).split(/\s+/).filter(Boolean);
+  if (!words.length) throw new AppError("Indiquez le joueur dont la famille est à garder");
+  const children = await prisma.child.findMany({ select: { familyId: true, firstName: true, lastName: true } });
+  const keepFamilies = new Set(children.filter((c) => { const parts = norm(`${c.firstName} ${c.lastName}`).split(/[\s-]+/); return words.every((w) => parts.some((p) => p.startsWith(w))); }).map((c) => c.familyId));
+  if (!keepFamilies.size) throw new AppError(`Aucun joueur « ${keepQuery} » trouvé : aucune famille n'a été effacée`);
+  const families = await prisma.family.findMany({ where: { id: { notIn: [...keepFamilies] } }, select: { id: true } });
+  let users = 0;
+  for (const f of families) users += (await deleteFamilyData(f.id)).users;
+  // family accounts never attached to a family
+  const loose = await prisma.user.findMany({ where: { role: "FAMILY", familyId: null }, select: { id: true } });
+  for (const u of loose) {
+    await prisma.auditLog.updateMany({ where: { actorId: u.id }, data: { actorId: null } });
+    await prisma.user.delete({ where: { id: u.id } }).catch(() => undefined);
+  }
+  await audit(user.id, "admin.purge_families", "Platform", undefined, { deleted: families.length });
+  return { families: families.length, users: users + loose.length };
+}
+
 /** Club: delete a player's file in this club; the player disappears entirely if he has no other club. */
 export async function deletePlayerFromClub(user: SessionUser, clubId: string, registrationId: string) {
   const r = await prisma.registration.findFirst({ where: { id: registrationId, clubId }, include: { child: true } });

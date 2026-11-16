@@ -98,3 +98,32 @@ export async function purgePlayersAction(_: ActionState, fd: FormData): Promise<
     return { ok: `${res.deleted} joueur(s) et ${res.registrations} dossier(s) effacés partout. Joueur(s) gardé(s) : ${res.kept.join(", ")}` };
   });
 }
+
+/** Demo: deletes every family account except the family of the player(s) to keep. */
+export async function purgeFamiliesAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const admin = await requireUser("ADMIN");
+    if (process.env.DEMO_DATA !== "1") throw new AppError("Réservé au site de démonstration");
+    if (str(fd, "confirm") !== "EFFACER") return { error: "Tapez EFFACER pour confirmer" };
+    const { purgeFamiliesExcept } = await import("@/server/services/purge");
+    const res = await purgeFamiliesExcept(admin, str(fd, "keep"));
+    revalidatePath("/", "layout");
+    return { ok: `${res.families} famille(s) et ${res.users} compte(s) famille effacés. Seule la famille de « ${str(fd, "keep")} » est conservée.` };
+  });
+}
+
+/** Admin: deletes one family (account, players, files, payments, orders). */
+export async function deleteFamilyAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const admin = await requireUser("ADMIN");
+    if (fd.get("confirmDelete") !== "on") throw new AppError("Cochez la case pour confirmer");
+    const u = await prisma.user.findFirst({ where: { id: str(fd, "userId"), role: "FAMILY" } });
+    if (!u) throw new AppError("Compte famille introuvable");
+    const { deleteFamilyData } = await import("@/server/services/purge");
+    if (u.familyId) await deleteFamilyData(u.familyId);
+    else { await prisma.auditLog.updateMany({ where: { actorId: u.id }, data: { actorId: null } }); await prisma.user.delete({ where: { id: u.id } }); }
+    await audit(admin.id, "admin.delete_family", "User", u.id, { email: u.email });
+    revalidatePath("/admin/utilisateurs");
+    return { ok: `Famille ${u.lastName} supprimée` };
+  });
+}

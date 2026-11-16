@@ -1,4 +1,5 @@
 import { prisma } from "@/server/db";
+import { DeleteFamily } from "./delete-family";
 import { Card, PageHeader, Badge, Input, Button, formatDateTime } from "@/components/ui";
 import { unlockUserAction, revokeSessionsAction } from "@/app/actions/admin";
 
@@ -23,6 +24,7 @@ export default async function Users({ searchParams }: { searchParams: Promise<{ 
               <td className="p-3"><div className="flex gap-2">
                 {u.lockedUntil && u.lockedUntil > new Date() && <form action={unlockUserAction}><input type="hidden" name="userId" value={u.id} /><Button size="sm" variant="outline">Déverrouiller</Button></form>}
                 <form action={revokeSessionsAction}><input type="hidden" name="userId" value={u.id} /><Button size="sm" variant="ghost">Déconnecter</Button></form>
+                {u.role === "FAMILY" && <DeleteFamily userId={u.id} name={u.lastName} />}
               </div></td>
             </tr>
           ))}</tbody>
