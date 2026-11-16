@@ -374,3 +374,16 @@ export async function requestPaymentAction(_: ActionState, fd: FormData): Promis
     return { ok: "Lien de paiement envoyé à la famille (email + notification)" };
   });
 }
+
+/** Deletes the player's file (and the player if he has no other club): he no longer appears anywhere. */
+export async function deletePlayerAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const res = await safe(async () => {
+    const { user, clubId } = await clubWriter("SECRETARY");
+    if (fd.get("confirmDelete") !== "on") throw new AppError("Cochez la case pour confirmer la suppression");
+    const { deletePlayerFromClub } = await import("@/server/services/purge");
+    await deletePlayerFromClub(user, clubId, str(fd, "registrationId"));
+    revalidatePath("/club", "layout");
+  });
+  if (res) return res;
+  redirect("/club/dossiers?statut=ALL&supprime=1");
+}

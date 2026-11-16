@@ -10,7 +10,7 @@ import { Alert, Card, PageHeader, RegistrationBadge, PaymentBadge, Progress, Bad
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { InstallmentsTable } from "@/components/installments-table";
 import { DocThumb } from "@/components/doc-thumb";
-import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction, checkFffAction, footclubsDoneAction, offlinePaymentAction, confirmReductionAction, addReductionAfterPaymentAction, changeCategoryAction, requestPaymentAction } from "@/app/actions/club";
+import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction, checkFffAction, footclubsDoneAction, offlinePaymentAction, confirmReductionAction, addReductionAfterPaymentAction, changeCategoryAction, requestPaymentAction, deletePlayerAction } from "@/app/actions/club";
 import { FFF_ITEMS } from "@/server/services/footclubs";
 
 export const metadata = { title: "Dossier" };
@@ -266,6 +266,17 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
           <Card className="p-5">
             <h2 className="flex items-center gap-2 font-bold"><History className="h-4 w-4" /> Historique</h2>
             <ol className="mt-3 space-y-3 border-l-2 border-line pl-4 text-sm">{r.events.map((e) => <li key={e.id}><p>{e.message}</p><p className="text-xs text-muted">{formatDateTime(e.createdAt)}</p></li>)}</ol>
+          </Card>
+          <Card className="border-red-200 p-5">
+            <details>
+              <summary className="cursor-pointer text-sm font-semibold text-danger">Supprimer le joueur…</summary>
+              <p className="mt-2 text-xs text-muted">Efface le dossier, les documents, les signatures, les paiements et les factures. Le joueur n'apparaît plus nulle part (ni pour le club, ni pour la famille). Action définitive ; un paiement déjà encaissé n'est pas remboursé automatiquement.</p>
+              <ActionForm action={deletePlayerAction} className="mt-2 space-y-2">
+                <input type="hidden" name="registrationId" value={r.id} />
+                <label className="flex items-center gap-2 text-xs"><input type="checkbox" name="confirmDelete" className="accent-red-600" data-testid="confirm-delete" /> Je confirme la suppression définitive de {r.child.firstName} {r.child.lastName}</label>
+                <SubmitButton variant="danger" className="w-full">Supprimer le joueur</SubmitButton>
+              </ActionForm>
+            </details>
           </Card>
         </aside>
       </div>

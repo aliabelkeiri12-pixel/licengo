@@ -3,6 +3,7 @@ import { prisma } from "@/server/db";
 import { platformStats } from "@/server/services/stats";
 import { Card, PageHeader, StatCard, formatDate } from "@/components/ui";
 import { DemoReset } from "./demo-reset";
+import { PurgePlayers } from "./purge-players";
 
 export const metadata = { title: "Administration" };
 
@@ -48,7 +49,7 @@ export default async function AdminHome() {
           <p className="mt-3 text-xs text-muted">Données au {formatDate(new Date())}</p>
         </Card>
       </div>
-      {process.env.DEMO_DATA === "1" && <DemoReset />}
+      {process.env.DEMO_DATA === "1" && <><PurgePlayers /><DemoReset /></>}
     </>
   );
 }

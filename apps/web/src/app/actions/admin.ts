@@ -85,3 +85,16 @@ export async function resetDemoAction(_: ActionState, fd: FormData): Promise<Act
     redirect("/connexion?reinitialise=1");
   });
 }
+
+/** Demo: deletes every player everywhere except the one(s) to keep. */
+export async function purgePlayersAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const admin = await requireUser("ADMIN");
+    if (process.env.DEMO_DATA !== "1") throw new AppError("Réservé au site de démonstration");
+    if (str(fd, "confirm") !== "EFFACER") return { error: "Tapez EFFACER pour confirmer" };
+    const { purgePlayersExcept } = await import("@/server/services/purge");
+    const res = await purgePlayersExcept(admin, str(fd, "keep"));
+    revalidatePath("/", "layout");
+    return { ok: `${res.deleted} joueur(s) et ${res.registrations} dossier(s) effacés partout. Joueur(s) gardé(s) : ${res.kept.join(", ")}` };
+  });
+}

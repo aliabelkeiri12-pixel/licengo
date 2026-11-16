@@ -468,3 +468,29 @@ describe("dossier simplifié, validation par le club puis demande de paiement, r
     await prisma.clubFee.deleteMany({ where: { id: { in: [mutation.id, pass.id, ville.id] } } });
   });
 });
+
+describe("suppression de joueurs (à exécuter en dernier)", () => {
+  it("le club supprime un joueur ; l'admin efface tous les joueurs sauf un, partout (paiements, factures, documents compris)", async () => {
+    const { deletePlayerFromClub, purgePlayersExcept } = await import("@/server/services/purge");
+    const { createRegistration } = await import("@/server/services/registrations");
+    const fam = await prisma.family.findFirstOrThrow({ where: { guardians: { some: { id: family.id } } } });
+    const start = Number((await prisma.category.findUniqueOrThrow({ where: { id: u11Id } })).season.slice(0, 4));
+    const mk = (firstName: string, lastName: string) => prisma.child.create({ data: { familyId: fam.id, firstName, lastName, birthDate: new Date(Date.UTC(start - 10, 1, 1)), gender: "M" } });
+    const gone = await mk("Zoé", "Martin");
+    const reg = await createRegistration(family as never, gone.id, u11Id);
+    await expect(deletePlayerFromClub(staff as never, "autre-club", reg.id)).rejects.toThrow("introuvable");
+    await deletePlayerFromClub(staff as never, clubId, reg.id);
+    expect(await prisma.child.findUnique({ where: { id: gone.id } })).toBeNull();
+
+    const idrissa = await mk("Idrissa", "DRAMÉ");
+    await expect(purgePlayersExcept(admin as never, "Personne Inconnue")).rejects.toThrow("rien n'a été effacé");
+    expect(await prisma.payment.count({ where: { registrationId: { not: null } } })).toBeGreaterThan(0);
+    const res = await purgePlayersExcept(admin as never, "Idriss Dramé");
+    expect(res.kept).toEqual(["DRAMÉ Idrissa"]);
+    expect((await prisma.child.findMany()).map((c) => c.id)).toEqual([idrissa.id]);
+    expect(await prisma.registration.count()).toBe(0);
+    expect(await prisma.payment.count({ where: { registrationId: { not: null } } })).toBe(0);
+    expect(await prisma.invoice.count({ where: { payment: { registrationId: { not: null } } } })).toBe(0);
+    expect(await prisma.club.count()).toBe(1); // clubs, categories and accounts are kept
+  });
+});

@@ -46,6 +46,7 @@ export default async function Files({ searchParams }: { searchParams: Promise<Re
   return (
     <>
       <PageHeader title="Dossiers d'inscription" subtitle={`Saison ${season} · détection automatique des pièces manquantes et incohérences`} />
+      {sp.supprime && <div className="mb-4"><Alert tone="success">Joueur supprimé : il n'apparaît plus nulle part.</Alert></div>}
       {sp.relance && <div className="mb-4"><Alert tone="success">{sp.relance} relance(s) envoyée(s).</Alert></div>}
       <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-white p-1 ring-1 ring-line">
         {tabs.map((t) => <Link key={t.key} href={qs(t.key)} className={cx("shrink-0 rounded-lg px-3 py-2 text-sm font-semibold", t.key === tab.key ? "bg-pitch-800 text-white" : "text-muted hover:text-ink")}>{t.label} <span className="ml-1 opacity-70">{count(t)}</span></Link>)}
