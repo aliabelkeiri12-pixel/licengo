@@ -52,7 +52,7 @@ export default async function Categories({ searchParams }: { searchParams: Promi
         {fees.length === 0 && <p className="p-4 text-sm text-muted">Aucun supplément pour l'instant.</p>}
         {fees.map((f) => (
           <div key={f.id} className={`flex flex-wrap items-center justify-between gap-3 p-4 ${f.active ? "" : "opacity-50"}`}>
-            <div><p className="font-semibold">{f.label} <span className={`ml-1 font-bold ${f.kind === "REDUCTION" ? "text-pitch-700" : ""}`}>{f.kind === "REDUCTION" ? "-" : "+"}{formatEUR(f.amountCents)}</span></p>{f.description && <p className="text-xs text-muted">{f.description}</p>}{f.proofLabel && <p className="text-xs text-muted">Justificatif : {f.proofLabel}{f.proofDocType ? " · déposé par la famille dans son dossier" : ""}</p>}</div>
+            <div><p className="font-semibold">{f.label} <span className={`ml-1 font-bold ${f.kind === "REDUCTION" ? "text-pitch-700" : ""}`}>{f.amountCents === 0 ? "montant saisi par dossier" : `${f.kind === "REDUCTION" ? "-" : "+"}${formatEUR(f.amountCents)}`}</span></p>{f.description && <p className="text-xs text-muted">{f.description}</p>}{f.proofLabel && <p className="text-xs text-muted">Justificatif : {f.proofLabel}{f.proofDocType ? " · déposé par la famille dans son dossier" : ""}</p>}</div>
             <div className="flex items-center gap-3">
               <Badge tone={f.kind === "REDUCTION" ? "green" : f.mandatory ? "blue" : "gray"}>{f.kind === "REDUCTION" ? "Réduction" : f.mandatory ? "Obligatoire" : "Au choix"}</Badge>
               <form action={toggleClubFeeAction}><input type="hidden" name="feeId" value={f.id} /><button className="text-sm font-semibold text-pitch-700">{f.active ? "Désactiver" : "Réactiver"}</button></form>
@@ -65,7 +65,7 @@ export default async function Categories({ searchParams }: { searchParams: Promi
         <ActionForm action={saveClubFeeAction} className="grid grid-cols-1 gap-3 sm:grid-cols-[150px_1fr_120px_170px]" resetOnSuccess>
           <Select name="kind" defaultValue="SUPPLEMENT"><option value="SUPPLEMENT">+ Supplément</option><option value="REDUCTION">- Réduction</option></Select>
           <Input name="label" placeholder="Ex : Frais de mutation, Pass'Sport…" required />
-          <Input name="amount" placeholder="Montant €" inputMode="decimal" required />
+          <Input name="amount" placeholder="Montant € (0 = libre)" inputMode="decimal" required />
           <Select name="mandatory" defaultValue="no"><option value="no">Au choix de la famille</option><option value="yes">Obligatoire (suppléments)</option></Select>
           <div className="sm:col-span-4"><Select name="proofDocType" defaultValue=""><option value="">Réductions : document à déposer par la famille… (aucun)</option><option value="PROOF_OF_ADDRESS">Justificatif de domicile (moins de 3 mois)</option><option value="ARS_CERTIFICATE">Attestation ARS (CAF)</option><option value="PASS_SPORT">Pass'Sport</option><option value="OTHER">Autre justificatif</option></Select></div>
           <div className="sm:col-span-4"><Input name="proofLabel" placeholder="Réductions : justificatif demandé (ex : Code Pass'Sport, Attestation CAF ARS, Justificatif de domicile)" /></div>

@@ -19,8 +19,8 @@ export function ActionForm({ action, children, className, resetOnSuccess }: { ac
   const [state, formAction] = useActionState(action, undefined);
   return (
     <form action={formAction} className={className} key={resetOnSuccess && state?.ok ? state.ok + Date.now() : undefined}>
-      {state?.error && <div className="mb-4"><Alert tone="error">{state.error}</Alert></div>}
-      {state?.ok && <div className="mb-4"><Alert tone="success">{state.ok}</Alert></div>}
+      {state?.error && <div className="col-span-full mb-4"><Alert tone="error">{state.error}</Alert></div>}
+      {state?.ok && <div className="col-span-full mb-4"><Alert tone="success">{state.ok}</Alert></div>}
       {typeof children === "function" ? children(state) : children}
     </form>
   );
