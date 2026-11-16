@@ -47,12 +47,12 @@ export default async function Categories({ searchParams }: { searchParams: Promi
       </div>
 
       <h2 className="font-display mb-1 mt-10 text-xl font-bold" id="supplements">Suppléments et réductions</h2>
-      <p className="mb-4 text-sm text-muted"><b>Suppléments</b> : frais de mutation, équipement… <b>Réductions</b> : habitant de la ville, ARS, Pass'Sport… La famille coche à l'inscription ; une réduction avec justificatif reste <b>en attente</b> jusqu'à ce que vous la confirmiez (même en août, après le paiement : elle est alors déduite des échéances restantes).</p>
+      <p className="mb-4 text-sm text-muted"><b>Suppléments</b> : frais de mutation, équipement… <b>Réductions</b> : habitant de la ville, ARS, Pass'Sport… La famille dépose le justificatif dans son dossier ; vous le vérifiez et la réduction est appliquée quand vous validez et envoyez la demande de paiement. Justificatif arrivé plus tard (ARS en août) : ajoutez la réduction depuis le dossier, elle est déduite des échéances restantes. Les frais de mutation ont un montant par défaut, modifiable dossier par dossier.</p>
       <Card className="divide-y divide-line">
         {fees.length === 0 && <p className="p-4 text-sm text-muted">Aucun supplément pour l'instant.</p>}
         {fees.map((f) => (
           <div key={f.id} className={`flex flex-wrap items-center justify-between gap-3 p-4 ${f.active ? "" : "opacity-50"}`}>
-            <div><p className="font-semibold">{f.label} <span className={`ml-1 font-bold ${f.kind === "REDUCTION" ? "text-pitch-700" : ""}`}>{f.kind === "REDUCTION" ? "-" : "+"}{formatEUR(f.amountCents)}</span></p>{f.description && <p className="text-xs text-muted">{f.description}</p>}{f.proofLabel && <p className="text-xs text-muted">Justificatif : {f.proofLabel}</p>}</div>
+            <div><p className="font-semibold">{f.label} <span className={`ml-1 font-bold ${f.kind === "REDUCTION" ? "text-pitch-700" : ""}`}>{f.kind === "REDUCTION" ? "-" : "+"}{formatEUR(f.amountCents)}</span></p>{f.description && <p className="text-xs text-muted">{f.description}</p>}{f.proofLabel && <p className="text-xs text-muted">Justificatif : {f.proofLabel}{f.proofDocType ? " · déposé par la famille dans son dossier" : ""}</p>}</div>
             <div className="flex items-center gap-3">
               <Badge tone={f.kind === "REDUCTION" ? "green" : f.mandatory ? "blue" : "gray"}>{f.kind === "REDUCTION" ? "Réduction" : f.mandatory ? "Obligatoire" : "Au choix"}</Badge>
               <form action={toggleClubFeeAction}><input type="hidden" name="feeId" value={f.id} /><button className="text-sm font-semibold text-pitch-700">{f.active ? "Désactiver" : "Réactiver"}</button></form>
