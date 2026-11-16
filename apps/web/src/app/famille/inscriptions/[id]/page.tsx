@@ -53,10 +53,13 @@ export default async function RegistrationPage({ params, searchParams }: { param
   // step states
   const fffMode = r.club.footclubsMode;
   const docsDone = fffMode ? !!r.fffDeclaredAt && r.fffStatus !== "MISSING" : c.missingUploads.length === 0 && !c.issues.some((i) => i.code.startsWith("DOC_"));
-  const payLocked = r.club.payAfterCheck && !(fffMode ? r.fffStatus === "OK" : !!r.paymentRequestedAt);
+  // the club validated / sent the payment request: the family only has the payment left to do
+  const clubApproved = fffMode ? r.fffStatus === "OK" : !!r.paymentRequestedAt || r.status === "VALIDATED";
+  const payLocked = r.club.payAfterCheck && !clubApproved;
+  const paymentOnly = !closed && (r.status === "VALIDATED" || !!r.paymentRequestedAt);
   const signDone = c.missingSignatures.length === 0 && r.signatures.some((s) => s.type === "IMAGE_RIGHTS");
   const payDone = !!payment;
-  const dossierDone = docsDone && signDone;
+  const dossierDone = paymentOnly || (docsDone && signDone);
   const current = !dossierDone ? 1 : !payDone ? 2 : 0;
   const extras = extrasOf(r.extras);
   const pendingReductions = extras.filter((e) => e.pending);
@@ -93,9 +96,9 @@ export default async function RegistrationPage({ params, searchParams }: { param
         <div className="mb-4"><Alert tone="warning"><MessageSquareWarning className="mr-1 inline h-4 w-4" /><b>Message du club :</b> {r.decisionReason}</Alert></div>
       )}
       {r.status === "SUBMITTED" && <div className="mb-4"><Alert tone="success">✅ Dossier complet transmis au club. Il est en cours de vérification : vous serez prévenu dès sa validation.</Alert></div>}
-      {r.status === "VALIDATED" && <div className="mb-4"><Alert tone="success">🎉 Inscription validée par le club. {r.federationLicenseNumber ? `N° de licence : ${r.federationLicenseNumber}` : "Le numéro de licence fédérale apparaîtra ici dès son enregistrement."}</Alert></div>}
+      {r.status === "VALIDATED" && !(paymentOnly && r.paymentStatus !== "PAID") && <div className="mb-4"><Alert tone="success">🎉 Inscription validée par le club. {r.federationLicenseNumber ? `N° de licence : ${r.federationLicenseNumber}` : "Le numéro de licence fédérale apparaîtra ici dès son enregistrement."}</Alert></div>}
 
-      <div className="mb-6"><div className="mb-1 flex justify-between text-sm"><span className="font-semibold">Dossier complété</span><span className="font-bold text-pitch-700">{c.progress}%</span></div><Progress value={c.progress} /></div>
+      {!paymentOnly && <div className="mb-6"><div className="mb-1 flex justify-between text-sm"><span className="font-semibold">Dossier complété</span><span className="font-bold text-pitch-700">{c.progress}%</span></div><Progress value={c.progress} /></div>}
       {r.status === "CANCELLED" && (
         <div className="mb-4 rounded-2xl border-2 border-line bg-white p-4">
           <p className="font-bold">Cette inscription a été annulée</p>
@@ -122,6 +125,9 @@ export default async function RegistrationPage({ params, searchParams }: { param
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
           <div id="etape-1" className="scroll-mt-24" />
+          {paymentOnly ? (
+            <p className="flex items-center gap-2 rounded-xl bg-pitch-50 p-3 text-sm font-semibold text-pitch-700" data-testid="dossier-validated"><CheckCircle2 className="h-5 w-5" /> Dossier validé par le club{r.paymentStatus === "PAID" ? "" : " : il ne reste que le paiement"}</p>
+          ) : (
           <Step n={1} title="Mon dossier" done={dossierDone} active={current === 1}>
             {fffMode ? (
               <div className="rounded-xl border border-line p-4">
@@ -185,6 +191,7 @@ export default async function RegistrationPage({ params, searchParams }: { param
             )}
             {dossierDone && ["SUBMITTED", "VALIDATED"].includes(r.status) && <p className="mt-3 font-semibold text-pitch-700">✓ Dossier envoyé au club</p>}
           </Step>
+          )}
 
           <Step n={2} title="Le paiement" done={payDone} active={current === 2} locked={!dossierDone}>
             {(extras.length > 0 || pendingReductions.length > 0) && (
@@ -209,7 +216,10 @@ export default async function RegistrationPage({ params, searchParams }: { param
             )}
             {payment ? (
               <><p className="mb-2 text-sm text-muted">Total {formatEUR(payment.totalCents)} en {payment.installmentsCount}×</p><InstallmentsTable installments={payment.installments} total={payment.installmentsCount} canRetry /></>
-            ) : closed ? <p className="text-sm text-muted">Aucun paiement requis.</p> : payLocked && c.state === "COMPLETE" ? (
+            ) : closed ? <p className="text-sm text-muted">Aucun paiement requis.</p> : r.paymentStatus === "PAID" ? <p className="font-semibold text-pitch-700">✓ Licence réglée</p>
+            : clubApproved && r.club.payAfterCheck ? (
+              <InstallmentPicker registrationId={r.id} licenseCents={r.licenseFeeCents} feeCents={r.platformFeeCents} max={r.category.maxInstallments} />
+            ) : payLocked && c.state === "COMPLETE" ? (
               <div className="rounded-xl bg-chalk p-4 text-sm" data-testid="payment-wait-club"><p className="font-semibold">⏳ Le club vérifie votre dossier.</p><p className="mt-1 text-muted">Dès qu'il l'aura validé, vous recevrez par email la demande de paiement avec le montant final (frais de mutation éventuels compris). Vous pourrez alors payer en 1 à 4 fois.</p></div>
             ) : c.state === "COMPLETE" ? (
               <InstallmentPicker registrationId={r.id} licenseCents={r.licenseFeeCents} feeCents={r.platformFeeCents} max={r.category.maxInstallments} />

@@ -21,11 +21,13 @@ export async function startLicensePayment(user: SessionUser, registrationId: str
   const r = await assertFamilyAccess(user, registrationId);
   if (["REJECTED", "CANCELLED"].includes(r.status)) throw new AppError("Dossier clôturé");
   // Payment is only possible once the file is complete (documents, health questionnaire, signatures, coherent data)
+  // once the club has validated the file (or sent the payment request), its decision prevails
+  const approvedByClub = r.status === "VALIDATED" || !!r.paymentRequestedAt;
   const completeness = await computeCompleteness(r);
-  if (completeness.state !== "COMPLETE")
+  if (!approvedByClub && completeness.state !== "COMPLETE")
     throw new AppError(`Complétez d'abord le dossier avant de payer : ${completeness.summary.join(" · ")}`);
   if (r.club.payAfterCheck) {
-    const checked = r.club.footclubsMode ? r.fffStatus === "OK" : !!r.paymentRequestedAt;
+    const checked = r.club.footclubsMode ? r.fffStatus === "OK" : !!r.paymentRequestedAt || r.status === "VALIDATED";
     if (!checked) throw new AppError("Le club vérifie d'abord votre dossier : le paiement s'ouvrira dès sa vérification");
   }
   if (installmentsCount > 1 && !opts.acceptBalanceClause)

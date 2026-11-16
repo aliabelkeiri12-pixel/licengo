@@ -95,6 +95,9 @@ try {
   dossierUrl = page.url();
   payStep = async () => step("Paiement en 3 fois après validation du club (64,99 € aujourd'hui, mutation et réduction comprises)", async () => {
     await page.goto(dossierUrl);
+    await page.getByTestId("dossier-validated").waitFor(); // dossier validé : il ne reste que le paiement
+    if (await page.locator('[data-testid^="file-"]').count()) throw new Error("envoi de documents encore possible après validation");
+    await shot(page, "07b-paiement-seulement");
     await expectText(page, "Frais de mutation");
     await expectText(page, "Habitant de Lyon");
     await page.getByRole("radio", { name: /3×/ }).click();

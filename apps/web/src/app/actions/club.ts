@@ -10,7 +10,7 @@ import type { StaffRole as SR } from "@prisma/client";
 import { AppError } from "@/server/errors";
 import { audit } from "@/server/audit";
 import { notifyFamily } from "@/server/notify";
-import { decide, assertClubAccess, currentSeason, setRegistrationExtras, addReductionAfterPayment, changeCategory } from "@/server/services/registrations";
+import { decide, assertClubAccess, currentSeason, setRegistrationExtras, addReductionAfterPayment, changeCategory, requestPayment } from "@/server/services/registrations";
 import { reviewDocument } from "@/server/services/documents";
 import { refundPayment } from "@/server/services/payments";
 import { updateOrderStatus, lowStockAlert } from "@/server/services/shop";
@@ -361,5 +361,16 @@ export async function changeCategoryAction(_: ActionState, fd: FormData): Promis
     const cat = await changeCategory(user, str(fd, "registrationId"), str(fd, "categoryId"));
     revalidatePath(`/club/dossiers/${str(fd, "registrationId")}`);
     return { ok: `Catégorie changée : ${cat.name}` };
+  });
+}
+
+export async function requestPaymentAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const { user } = await clubWriter("SECRETARY", "TREASURER");
+    const r = await assertClubAccess(user, str(fd, "registrationId"));
+    if (r.status !== "VALIDATED" || r.paymentStatus !== "UNPAID") throw new AppError("Validez d'abord le dossier");
+    await requestPayment(user, r.id);
+    revalidatePath(`/club/dossiers/${r.id}`);
+    return { ok: "Lien de paiement envoyé à la famille (email + notification)" };
   });
 }

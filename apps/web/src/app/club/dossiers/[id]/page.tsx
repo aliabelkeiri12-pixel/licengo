@@ -10,7 +10,7 @@ import { Alert, Card, PageHeader, RegistrationBadge, PaymentBadge, Progress, Bad
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { InstallmentsTable } from "@/components/installments-table";
 import { DocThumb } from "@/components/doc-thumb";
-import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction, checkFffAction, footclubsDoneAction, offlinePaymentAction, confirmReductionAction, addReductionAfterPaymentAction, changeCategoryAction } from "@/app/actions/club";
+import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction, checkFffAction, footclubsDoneAction, offlinePaymentAction, confirmReductionAction, addReductionAfterPaymentAction, changeCategoryAction, requestPaymentAction } from "@/app/actions/club";
 import { FFF_ITEMS } from "@/server/services/footclubs";
 
 export const metadata = { title: "Dossier" };
@@ -112,6 +112,13 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
                 <Textarea name="reason" placeholder="Message à la famille (ex : merci de renvoyer une photo nette)" />
                 <button name="decision" value="REOPEN" className="h-11 w-full rounded-xl bg-pitch-800 text-sm font-semibold text-white">Rouvrir le dossier</button>
               </ActionForm>
+            </Card>
+          )}
+          {r.status === "VALIDATED" && r.paymentStatus === "UNPAID" && !payment && (
+            <Card className="border-2 border-volt-500 p-5" data-testid="send-payment">
+              <h2 className="font-display text-lg font-bold">Lien de paiement</h2>
+              <p className="mt-1 text-sm text-muted">{r.paymentRequestedAt ? `Envoyé le ${formatDateTime(r.paymentRequestedAt)} : ${formatEUR(r.licenseFeeCents + r.platformFeeCents)}. La famille n'a pas encore payé.` : "Le dossier est validé : envoyez le lien de paiement à la famille (1 à 4 fois)."}</p>
+              <ActionForm action={requestPaymentAction} className="mt-3"><input type="hidden" name="registrationId" value={r.id} /><SubmitButton className="w-full">{r.paymentRequestedAt ? "Renvoyer le lien de paiement" : "Envoyer le lien de paiement"}</SubmitButton></ActionForm>
             </Card>
           )}
           {!closed && (
