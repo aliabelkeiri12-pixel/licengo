@@ -65,7 +65,16 @@ export async function createRegistrationAction(_: ActionState, fd: FormData): Pr
   let id = "";
   const res = await safe(async () => {
     const u = await family();
-    id = (await createRegistration(u, str(fd, "childId"), str(fd, "categoryId"), fd.getAll("extras").map(String))).id;
+    let childId = str(fd, "childId");
+    if (!childId || childId === "new") {
+      // new player typed directly in the registration form
+      const d = childSchema.parse({ firstName: fd.get("firstName"), lastName: fd.get("lastName"), birthDate: fd.get("birthDate"), gender: fd.get("gender") });
+      if ((await prisma.child.count({ where: { familyId: u.familyId, deletedAt: null } })) >= 12) throw new AppError("Nombre maximum de membres atteint");
+      childId = (await prisma.child.create({ data: { firstName: d.firstName, lastName: d.lastName, birthDate: d.birthDate, gender: d.gender, familyId: u.familyId } })).id;
+      await audit(u.id, "child.create", "Child", childId);
+    }
+    // the club decides the transfer fee and the reductions when it checks the file
+    id = (await createRegistration(u, childId, str(fd, "categoryId"), [])).id;
   });
   if (res) return res;
   redirect(`/famille/inscriptions/${id}`);

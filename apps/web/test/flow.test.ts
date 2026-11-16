@@ -13,6 +13,7 @@ const loadUser = (id: string) => prisma.user.findUniqueOrThrow({ where: { id }, 
 
 const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8cfc0f01f0005000201a5d1a5d40000000049454e44ae426082", "hex");
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 1)]);
+const extrasOfReg = (r: { extras: unknown }) => (Array.isArray(r.extras) ? (r.extras as { pending?: boolean }[]) : []);
 const file = (buf: Buffer, name: string, type: string) => new File([new Uint8Array(buf)], name, { type });
 
 let family: SU, staff: SU, admin: SU, clubId: string, childId: string, u11Id: string;
@@ -418,9 +419,9 @@ describe("dossier simplifié, validation par le club puis demande de paiement, r
     const start = Number((await prisma.category.findUniqueOrThrow({ where: { id: u11Id } })).season.slice(0, 4));
     const kid = await prisma.child.create({ data: { familyId: fam.id, firstName: "Sami", lastName: "Test", birthDate: new Date(Date.UTC(start - 10, 6, 6)), gender: "M" } });
 
-    // the family picks two reductions; Pass'Sport waits for its code (arrives in August)
-    const r0 = await reg.createRegistration(family as never, kid.id, u11Id, [pass.id, ville.id]);
-    expect(r0.licenseFeeCents).toBe(15000 - 1000);
+    // the family only gives the player, the category and the documents
+    const r0 = await reg.createRegistration(family as never, kid.id, u11Id, []);
+    expect(r0.licenseFeeCents).toBe(15000);
     let c = await reg.computeCompleteness(await reg.getRegistration(r0.id));
     expect(c.requiredUploads).toEqual(["PHOTO", "MEDICAL_CERTIFICATE"]);
     await uploadDocument(family as never, { childId: kid.id, registrationId: r0.id, type: "PHOTO", file: file(PNG, "p.png", "image/png") });
@@ -431,31 +432,32 @@ describe("dossier simplifié, validation par le club puis demande de paiement, r
     expect((await reg.getRegistration(r0.id)).status).toBe("SUBMITTED"); // no health questionnaire, no ID asked
     await expect(startLicensePayment(family as never, r0.id, 1)).rejects.toThrow("vérifie");
 
-    // the club checks, adds the transfer fee and sends the payment request
-    expect(await reg.setRegistrationExtras(staff as never, r0.id, [mutation.id, pass.id, ville.id], { notify: false })).toBe(15000 + 3000 - 1000);
+    // the club checks: transferred player living in the town → applied at once, then payment request
+    // the transfer fee is adjusted by the secretary (45 € for this category instead of 30 €)
+    expect(await reg.setRegistrationExtras(staff as never, r0.id, [mutation.id, ville.id], { notify: false, amounts: { [mutation.id]: 4500 } })).toBe(15000 + 4500 - 1000);
+    expect(extrasOfReg(await reg.getRegistration(r0.id)).some((e) => e.pending)).toBe(false);
     await reg.decide(staff as never, r0.id, "VALIDATE");
     const r1 = await reg.getRegistration(r0.id);
     expect(r1.paymentRequestedAt).not.toBeNull();
     const mails = (globalThis as { __sentMails?: { subject: string; text: string }[] }).__sentMails ?? [];
     const req = mails.find((m) => m.subject.includes("règlement de la licence de Sami"));
-    expect(req?.text).toContain("Frais de mutation : +30,00");
-    expect(req?.text).toContain("TOTAL : 174,99");
+    expect(req?.text).toContain("Frais de mutation : +45,00");
+    expect(req?.text).toContain("TOTAL : 189,99");
 
     // the family pays in 4 times in June
     const { paymentId } = await startLicensePayment(family as never, r0.id, 4, { acceptBalanceClause: true });
     let p = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId }, include: { installments: { orderBy: { index: "asc" } } } });
-    expect(p.installments.map((i) => i.clubAmountCents)).toEqual([4250, 4250, 4250, 4250]);
+    expect(p.installments.map((i) => i.clubAmountCents)).toEqual([4625, 4625, 4625, 4625]);
     await markInstallmentPaid(p.installments[0].id, { intentId: "pi_s", customerId: "cus_s", paymentMethodId: "pm_mock_ok" });
 
     // August: the Pass'Sport code arrives, the club applies it → taken off the last installments
-    await reg.addReductionProof(family as never, r0.id, pass.id, "PS-2026-ABCD");
-    await reg.confirmReduction(staff as never, r0.id, pass.id);
+    await reg.addReductionAfterPayment(staff as never, r0.id, pass.id);
     p = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId }, include: { installments: { orderBy: { index: "asc" } } } });
-    expect(p.installments.map((i) => i.clubAmountCents)).toEqual([4250, 4250, 3500, 0]);
+    expect(p.installments.map((i) => i.clubAmountCents)).toEqual([4625, 4625, 4250, 0]);
     expect(p.installments[3].status).toBe("CANCELLED");
-    expect(p.clubAmountCents).toBe(12000);
-    expect((await reg.getRegistration(r0.id)).licenseFeeCents).toBe(12000);
-    await expect(reg.confirmReduction(staff as never, r0.id, pass.id)).rejects.toThrow("déjà appliquée");
+    expect(p.clubAmountCents).toBe(13500);
+    expect((await reg.getRegistration(r0.id)).licenseFeeCents).toBe(13500);
+    await expect(reg.addReductionAfterPayment(staff as never, r0.id, pass.id)).rejects.toThrow("déjà appliquée");
 
     await prisma.club.update({ where: { id: clubId }, data: { payAfterCheck: false, requiredUploads: [], requiredSignatures: [] } });
     await prisma.clubFee.deleteMany({ where: { id: { in: [mutation.id, pass.id, ville.id] } } });

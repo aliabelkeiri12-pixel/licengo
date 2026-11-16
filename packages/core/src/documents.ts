@@ -6,6 +6,8 @@ export const DOCUMENT_TYPES = [
   "PARENTAL_AUTHORIZATION",
   "PROOF_OF_ADDRESS",
   "IMAGE_RIGHTS",
+  "ARS_CERTIFICATE",
+  "PASS_SPORT",
   "OTHER",
 ] as const;
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
@@ -16,7 +18,9 @@ export const DOCUMENT_LABELS: Record<DocumentType, string> = {
   MEDICAL_CERTIFICATE: "Certificat médical",
   HEALTH_QUESTIONNAIRE: "Attestation questionnaire de santé",
   PARENTAL_AUTHORIZATION: "Autorisation parentale",
-  PROOF_OF_ADDRESS: "Justificatif de domicile",
+  PROOF_OF_ADDRESS: "Justificatif de domicile (moins de 3 mois)",
+  ARS_CERTIFICATE: "Attestation ARS (CAF)",
+  PASS_SPORT: "Pass'Sport",
   IMAGE_RIGHTS: "Autorisation droit à l'image",
   OTHER: "Autre justificatif",
 };

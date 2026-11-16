@@ -125,16 +125,18 @@ export const extrasOf = (json: unknown): Extra[] => (Array.isArray(json) ? (json
  * Mandatory supplements + optional supplements / reductions chosen (ids validated against the club).
  * A reduction asking for a proof is PENDING until the club confirms the proof (it may arrive months later).
  */
-async function selectExtras(clubId: string, optionalIds: string[], previous: Extra[] = []): Promise<Extra[]> {
+async function selectExtras(clubId: string, optionalIds: string[], previous: Extra[] = [], byClub = false, amounts: Record<string, number> = {}): Promise<Extra[]> {
   const fees = await prisma.clubFee.findMany({ where: { clubId, active: true }, orderBy: [{ kind: "desc" }, { createdAt: "asc" }] });
   return fees.filter((f) => f.mandatory || optionalIds.includes(f.id)).map((f) => {
     const before = previous.find((p) => p.id === f.id);
     const reduction = f.kind === "REDUCTION";
     return {
       id: f.id, label: f.label, kind: reduction ? "REDUCTION" : "SUPPLEMENT",
-      amountCents: reduction ? -f.amountCents : f.amountCents,
+      // the secretary may adjust a supplement (transfer fee differs by category)
+      amountCents: reduction ? -f.amountCents : byClub && amounts[f.id] !== undefined ? amounts[f.id] : f.amountCents,
       ...(before?.proof ? { proof: before.proof } : {}),
-      ...(reduction && f.proofLabel ? { pending: before ? !!before.pending : true } : {}),
+      // chosen by the club after checking the proof → applied at once
+      ...(reduction && f.proofLabel && !byClub ? { pending: before ? !!before.pending : true } : {}),
     } as Extra;
   });
 }
@@ -177,11 +179,12 @@ export async function createRegistration(user: SessionUser, childId: string, cat
 }
 
 /** Secretary adds / removes optional supplements (e.g. transfer fee) on a file, before any payment. */
-export async function setRegistrationExtras(user: SessionUser, registrationId: string, optionalExtraIds: string[], opts: { notify?: boolean } = {}) {
+export async function setRegistrationExtras(user: SessionUser, registrationId: string, optionalExtraIds: string[], opts: { notify?: boolean; amounts?: Record<string, number> } = {}) {
   const r = await assertClubAccess(user, registrationId);
   if (r.paymentStatus !== "UNPAID" || r.payments.some((p) => !["CANCELLED", "PENDING"].includes(p.status)))
     throw new AppError("Un paiement a déjà été effectué : les suppléments ne peuvent plus être modifiés");
-  const extras = await selectExtras(r.clubId, optionalExtraIds, extrasOf(r.extras));
+  for (const v of Object.values(opts.amounts ?? {})) if (!Number.isInteger(v) || v < 0 || v > 100000) throw new AppError("Montant invalide (0 à 1 000 €)");
+  const extras = await selectExtras(r.clubId, optionalExtraIds, extrasOf(r.extras), true, opts.amounts);
   const total = priceWithExtras(r.category.priceCents, extras);
   await prisma.registration.update({ where: { id: r.id }, data: { extras, licenseFeeCents: total } });
   await event(r.id, user.id, "EXTRAS", extras.length ? `Tarif : ${extras.map((e) => `${e.label} (${e.amountCents > 0 ? "+" : ""}${(e.amountCents / 100).toFixed(2).replace(".", ",")} €)`).join(", ")}` : "Aucun supplément ni réduction");
@@ -305,6 +308,18 @@ export async function confirmReduction(user: SessionUser, registrationId: string
   await event(r.id, user.id, "REDUCTION", detail);
   await audit(user.id, "registration.reduction", "Registration", r.id, { extra: e.label, amount });
   await notifyFamily(r.child.familyId, { type: "REDUCTION", title: `${r.club.name} : réduction appliquée`, body: `${r.child.firstName} – ${detail}`, link: `/famille/inscriptions/${r.id}` });
+}
+
+/** The club grants a reduction after the payment started (e.g. ARS certificate received in August). */
+export async function addReductionAfterPayment(user: SessionUser, registrationId: string, feeId: string) {
+  const r = await assertClubAccess(user, registrationId);
+  const fee = await prisma.clubFee.findFirst({ where: { id: feeId, clubId: r.clubId, kind: "REDUCTION", active: true } });
+  if (!fee) throw new AppError("Réduction introuvable");
+  const extras = extrasOf(r.extras);
+  if (extras.some((e) => e.id === fee.id)) throw new AppError("Cette réduction est déjà appliquée");
+  extras.push({ id: fee.id, label: fee.label, kind: "REDUCTION", amountCents: -fee.amountCents, pending: true } as Extra);
+  await prisma.registration.update({ where: { id: r.id }, data: { extras } });
+  await confirmReduction(user, registrationId, fee.id);
 }
 
 /** Reopens a file refused by mistake: the family can correct it again. */

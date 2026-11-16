@@ -10,7 +10,7 @@ import type { StaffRole as SR } from "@prisma/client";
 import { AppError } from "@/server/errors";
 import { audit } from "@/server/audit";
 import { notifyFamily } from "@/server/notify";
-import { decide, assertClubAccess, currentSeason, setRegistrationExtras } from "@/server/services/registrations";
+import { decide, assertClubAccess, currentSeason, setRegistrationExtras, addReductionAfterPayment } from "@/server/services/registrations";
 import { reviewDocument } from "@/server/services/documents";
 import { refundPayment } from "@/server/services/payments";
 import { updateOrderStatus, lowStockAlert } from "@/server/services/shop";
@@ -39,7 +39,11 @@ export async function decisionAction(_: ActionState, fd: FormData): Promise<Acti
     }
     const d = decisionSchema.parse({ decision: fd.get("decision"), reason: str(fd, "reason") || undefined });
     // fees chosen at validation (transfer fee…) are applied before the payment request is sent
-    if (d.decision === "VALIDATE" && fd.get("withFees") === "1") await setRegistrationExtras(user, str(fd, "registrationId"), fd.getAll("extras").map(String), { notify: false });
+    if (d.decision === "VALIDATE" && fd.get("withFees") === "1") {
+      const amounts: Record<string, number> = {};
+      for (const [k, v] of fd.entries()) if (k.startsWith("amount_") && String(v).trim()) amounts[k.slice(7)] = Math.round(Number(String(v).replace(",", ".")) * 100);
+      await setRegistrationExtras(user, str(fd, "registrationId"), fd.getAll("extras").map(String), { notify: false, amounts });
+    }
     if (d.decision === "REJECT" && fd.get("confirmReject") !== "on") throw new AppError("Cochez la case pour confirmer le refus définitif de l'inscription");
     await decide(user, str(fd, "registrationId"), d.decision, d.reason);
     revalidatePath("/club", "layout");
@@ -276,7 +280,8 @@ export async function saveClubFeeAction(_: ActionState, fd: FormData): Promise<A
     const { user, clubId } = await clubWriter("SECRETARY", "TREASURER");
     const d = z.object({ label: z.string().trim().min(2, "Libellé requis").max(60), amount: z.coerce.number().min(0.5).max(1000), description: z.string().trim().max(200).optional() }).parse(Object.fromEntries(fd));
     const kind = str(fd, "kind") === "REDUCTION" ? "REDUCTION" : "SUPPLEMENT";
-    await prisma.clubFee.create({ data: { clubId, label: d.label, amountCents: toCents(d.amount), description: d.description || null, kind, proofLabel: kind === "REDUCTION" ? str(fd, "proofLabel") || null : null, mandatory: kind === "SUPPLEMENT" && str(fd, "mandatory") === "yes" } });
+    await prisma.clubFee.create({ data: { clubId, label: d.label, amountCents: toCents(d.amount), description: d.description || null, kind, proofLabel: kind === "REDUCTION" ? str(fd, "proofLabel") || null : null,
+      proofDocType: kind === "REDUCTION" && ["PROOF_OF_ADDRESS", "ARS_CERTIFICATE", "PASS_SPORT", "OTHER"].includes(str(fd, "proofDocType")) ? str(fd, "proofDocType") : null, mandatory: kind === "SUPPLEMENT" && str(fd, "mandatory") === "yes" } });
     await audit(user.id, "club.fee_create", "Club", clubId, { label: d.label });
     revalidatePath("/club/categories");
     return { ok: kind === "REDUCTION" ? "Réduction ajoutée" : "Supplément ajouté" };
@@ -337,5 +342,14 @@ export async function confirmReductionAction(_: ActionState, fd: FormData): Prom
     await confirmReduction(user, str(fd, "registrationId"), str(fd, "extraId"));
     revalidatePath("/club", "layout");
     return { ok: "Réduction appliquée : la famille est prévenue du nouveau montant" };
+  });
+}
+
+export async function addReductionAfterPaymentAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const { user } = await clubWriter("SECRETARY", "TREASURER");
+    await addReductionAfterPayment(user, str(fd, "registrationId"), str(fd, "feeId"));
+    revalidatePath(`/club/dossiers/${str(fd, "registrationId")}`);
+    return { ok: "Réduction appliquée : déduite des prochaines échéances, la famille est prévenue" };
   });
 }

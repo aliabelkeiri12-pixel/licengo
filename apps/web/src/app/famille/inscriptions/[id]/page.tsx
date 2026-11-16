@@ -60,6 +60,8 @@ export default async function RegistrationPage({ params, searchParams }: { param
   const current = !dossierDone ? 1 : !payDone ? 2 : 0;
   const extras = extrasOf(r.extras);
   const pendingReductions = extras.filter((e) => e.pending);
+  // reductions the family can claim by uploading a proof (town resident, ARS, Pass'Sport…), checked by the club
+  const proofFees = await prisma.clubFee.findMany({ where: { clubId: r.clubId, active: true, kind: "REDUCTION", proofDocType: { not: null } }, orderBy: { createdAt: "asc" } });
   // a club that chose its own documents (photo, certificate, charter) does not ask the health questionnaire
   const customDocs = r.club.requiredUploads.length + r.club.requiredSignatures.length > 0;
   const needsHealth = !fffMode && (c.requiredSignatures.includes("HEALTH_QUESTIONNAIRE") || (!customDocs && (r.healthAnswer === "SOME_YES" || !r.healthAnswer)));
@@ -69,6 +71,19 @@ export default async function RegistrationPage({ params, searchParams }: { param
   const otherIssues = c.issues.filter((i) => !i.code.startsWith("DOC_"));
   const rejected = docs.filter((d) => d.status === "REJECTED" && c.requiredUploads.includes(d.type as never));
 
+  const uploadItem = (t: (typeof c.requiredUploads)[number]) => {
+                  const doc = docs.find((d) => d.type === t);
+                  const ok = doc && doc.status !== "REJECTED" && !c.issues.some((i) => i.code.endsWith(t));
+                  return (
+                    <li key={t} className="rounded-xl border border-line p-4">
+                      <p className="flex items-center gap-2 font-semibold">{ok ? <CheckCircle2 className="h-5 w-5 text-pitch-600" /> : <Circle className="h-5 w-5 text-muted" />}{DOCUMENT_LABELS[t]}</p>
+                      {doc?.status === "REJECTED" ? (
+                        <p className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-danger"><b>Refusé par le club :</b> {doc.rejectReason}<br /><span className="text-ink">Envoyez un nouveau document ci-dessous, il remplacera l'ancien.</span></p>
+                      ) : doc && <div className="mt-3"><DocumentRow doc={doc} canDelete={editable} /></div>}
+                      {!closed && !ok && <div className="mt-3"><DocumentUploader childId={r.childId} registrationId={r.id} type={t} withExpiry={t === "MEDICAL_CERTIFICATE"} /></div>}
+                    </li>
+                  );
+                };
   return (
     <>
       <PageHeader eyebrow={`${r.club.name} · Saison ${r.season}`} title={`Inscription de ${r.child.firstName}`} subtitle={`${r.category.name} · ${formatEUR(r.licenseFeeCents + r.platformFeeCents)} frais de service inclus`} />
@@ -132,21 +147,7 @@ export default async function RegistrationPage({ params, searchParams }: { param
                   )}
               </div>
             ) : (
-              <ul className="space-y-3">
-                {c.requiredUploads.map((t) => {
-                  const doc = docs.find((d) => d.type === t);
-                  const ok = doc && doc.status !== "REJECTED" && !c.issues.some((i) => i.code.endsWith(t));
-                  return (
-                    <li key={t} className="rounded-xl border border-line p-4">
-                      <p className="flex items-center gap-2 font-semibold">{ok ? <CheckCircle2 className="h-5 w-5 text-pitch-600" /> : <Circle className="h-5 w-5 text-muted" />}{DOCUMENT_LABELS[t]}</p>
-                      {doc?.status === "REJECTED" ? (
-                        <p className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-danger"><b>Refusé par le club :</b> {doc.rejectReason}<br /><span className="text-ink">Envoyez un nouveau document ci-dessous, il remplacera l'ancien.</span></p>
-                      ) : doc && <div className="mt-3"><DocumentRow doc={doc} canDelete={editable} /></div>}
-                      {!closed && !ok && <div className="mt-3"><DocumentUploader childId={r.childId} registrationId={r.id} type={t} withExpiry={t === "MEDICAL_CERTIFICATE"} /></div>}
-                    </li>
-                  );
-                })}
-              </ul>
+              <ul className="space-y-3">{c.requiredUploads.filter((t) => t !== "MEDICAL_CERTIFICATE").map(uploadItem)}</ul>
             )}
             <div className="mt-4">
               {signDone ? (
@@ -155,6 +156,33 @@ export default async function RegistrationPage({ params, searchParams }: { param
                 <SignAll registrationId={r.id} needsHealth={needsHealth} healthAnswer={r.healthAnswer} items={signItems} imageRightsText={SIGN_TEXT.IMAGE_RIGHTS} signerName={`${u.firstName} ${u.lastName}`} />
               )}
             </div>
+            {!fffMode && c.requiredUploads.includes("MEDICAL_CERTIFICATE") && <ul className="mt-4 space-y-3">{uploadItem("MEDICAL_CERTIFICATE")}</ul>}
+            {proofFees.length > 0 && !closed && (
+              <div className="mt-4 rounded-xl border border-dashed border-pitch-600 p-4" data-testid="reductions">
+                <p className="font-semibold">Vos réductions <span className="text-sm font-normal text-muted">(facultatif)</span></p>
+                <p className="text-xs text-muted">Ajoutez le justificatif de chaque réduction à laquelle vous avez droit. Le club le vérifie et applique la réduction dans le lien de paiement. Un justificatif reçu plus tard (ex. ARS en août) peut être ajouté ici à tout moment.</p>
+                <ul className="mt-3 space-y-3">
+                  {proofFees.map((f) => {
+                    const t = f.proofDocType as (typeof c.requiredUploads)[number];
+                    const applied = extras.some((e) => e.id === f.id && !e.pending);
+                    const doc = docs.find((d) => d.type === t);
+                    return (
+                      <li key={f.id} className="rounded-lg bg-chalk p-3 text-sm">
+                        <p className="flex justify-between font-semibold"><span>{f.label}</span><span className="text-pitch-700">-{formatEUR(f.amountCents)}</span></p>
+                        <p className="text-xs text-muted">{f.proofLabel ?? DOCUMENT_LABELS[t]}</p>
+                        {applied ? <p className="mt-1 font-semibold text-pitch-700">✓ Réduction appliquée par le club</p> : (
+                          <>
+                            {doc?.status === "REJECTED" ? <p className="mt-2 rounded-lg bg-red-50 p-2 text-danger"><b>Refusé par le club :</b> {doc.rejectReason}</p>
+                              : doc && <div className="mt-2"><DocumentRow doc={doc} canDelete={editable} /></div>}
+                            {(!doc || doc.status === "REJECTED") && <div className="mt-2"><DocumentUploader childId={r.childId} registrationId={r.id} type={t} /></div>}
+                          </>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
             {dossierDone && ["SUBMITTED", "VALIDATED"].includes(r.status) && <p className="mt-3 font-semibold text-pitch-700">✓ Dossier envoyé au club</p>}
           </Step>
 

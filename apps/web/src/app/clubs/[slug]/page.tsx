@@ -17,9 +17,8 @@ export default async function ClubPage({ params, searchParams }: { params: Promi
   const user = await getCurrentUser();
   const children = user?.familyId ? await prisma.child.findMany({ where: { familyId: user.familyId, deletedAt: null }, orderBy: { birthDate: "asc" } }) : [];
   const fee = club.plan?.licenseFeeCents ?? 499;
-  // when the club checks the file before asking for payment, it adds the optional fees itself (transfer fee…)
-  const extras = (await prisma.clubFee.findMany({ where: { clubId: club.id, active: true }, orderBy: [{ kind: "desc" }, { createdAt: "asc" }] }))
-    .filter((f) => !club.payAfterCheck || f.kind === "REDUCTION" || f.mandatory);
+  // only mandatory supplements are shown: the club adds transfer fee / reductions when it checks the file
+  const mandatory = await prisma.clubFee.findMany({ where: { clubId: club.id, active: true, mandatory: true }, orderBy: { createdAt: "asc" } });
   return (
     <main className="min-h-dvh pb-16">
       <div className="text-white" style={{ background: `linear-gradient(135deg, ${club.primaryColor}, #060B17)` }}>
@@ -55,12 +54,10 @@ export default async function ClubPage({ params, searchParams }: { params: Promi
             {!user ? (
               <div className="mt-3 space-y-3 text-sm"><p className="text-muted">Créez votre compte famille pour inscrire vos enfants en quelques minutes.</p><LinkButton href={`/inscription?next=/clubs/${club.slug}`} className="w-full">Créer un compte</LinkButton><LinkButton href={`/connexion?next=/clubs/${club.slug}`} variant="outline" className="w-full">J'ai déjà un compte</LinkButton></div>
             ) : user.role !== "FAMILY" ? <p className="mt-3 text-sm text-muted">Connectez-vous avec un compte famille pour inscrire un enfant.</p>
-            : children.length === 0 ? (
-              <div className="mt-3 space-y-3 text-sm"><p className="text-muted">Ajoutez d'abord l'enfant à inscrire.</p><LinkButton href={`/famille/enfants/nouveau?next=/clubs/${club.slug}`} className="w-full">Ajouter un enfant</LinkButton></div>
-            ) : (
+            : (
               <RegisterForm
                 feeCents={fee}
-                extras={extras.map((e) => ({ id: e.id, label: e.label, description: e.description, amountCents: e.amountCents, mandatory: e.mandatory, kind: e.kind, proofLabel: e.proofLabel }))}
+                mandatory={mandatory.map((e) => ({ id: e.id, label: e.label, amountCents: e.amountCents, kind: e.kind }))}
                 defaultChild={enfant}
                 members={children.map((c) => ({ id: c.id, name: `${c.firstName} ${c.lastName}`, year: c.birthDate.getUTCFullYear(), gender: c.gender }))}
                 categories={club.categories.map((c) => ({ id: c.id, name: c.name, min: c.birthYearMin, max: c.birthYearMax, gender: c.gender, price: c.priceCents }))}

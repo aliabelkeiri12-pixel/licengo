@@ -38,16 +38,6 @@ try {
     await page.click('button[type="submit"]');
     await page.waitForURL("**/famille/enfants/nouveau");
   });
-  await step("Ajout d'un enfant", async () => {
-    await page.fill('[name="firstName"]', "Noah");
-    await page.fill('[name="birthDate"]', "2016-06-15");
-    await page.selectOption('[name="gender"]', "M");
-    await page.fill('[name="birthPlace"]', "Lyon");
-    await shot(page, "03-ajout-enfant");
-    await page.click('button[type="submit"]');
-    await page.waitForURL(/\/famille\/enfants\/\w+/);
-    await expectText(page, "Informations enregistrées");
-  });
   await step("Recherche de club par code postal", async () => {
     await page.goto(`${BASE}/clubs?q=69003&rayon=10`);
     await expectText(page, "FC Lyon Est");
@@ -57,7 +47,13 @@ try {
     await expectText(page, "Commencer l'inscription");
     await shot(page, "05-page-club");
   });
-  await step("Création du dossier (catégorie proposée automatiquement)", async () => {
+  await step("Inscription en un seul formulaire : joueur + catégorie (proposée automatiquement)", async () => {
+    await page.getByTestId("new-player").waitFor();
+    await page.fill('[name="lastName"]', "Durand");
+    await page.fill('[name="firstName"]', "Noah");
+    await page.fill('[name="birthDate"]', "2016-06-15");
+    await page.check('input[name="gender"][value="M"]');
+    await shot(page, "03-inscription-joueur");
     const cat = await page.locator('[name="categoryId"] option:checked').textContent();
     if (!cat?.includes("U11")) throw new Error(`catégorie inattendue ${cat}`);
     await page.click("text=Commencer l'inscription");
@@ -86,15 +82,21 @@ try {
     await page.getByRole("button", { name: "Signer et continuer" }).click();
     await page.getByTestId("sigpad-all").waitFor({ state: "detached", timeout: 15000 });
   });
+  await step("Réduction commune : la famille dépose son justificatif de domicile", async () => {
+    await page.getByTestId("reductions").scrollIntoViewIfNeeded();
+    await page.setInputFiles('[data-testid="file-PROOF_OF_ADDRESS"]', path.join(tmp, "identite.pdf"));
+    await page.waitForSelector('[data-testid="file-PROOF_OF_ADDRESS"]', { state: "detached", timeout: 15000 });
+  });
   await step("Dossier transmis au club, paiement en attente de sa vérification", async () => {
     await expectText(page, "Dossier complet transmis au club");
     await page.getByTestId("payment-wait-club").waitFor();
     await shot(page, "07-dossier-complet");
   });
   dossierUrl = page.url();
-  payStep = async () => step("Paiement en 3 fois après validation du club (64,99 € aujourd'hui, mutation comprise)", async () => {
+  payStep = async () => step("Paiement en 3 fois après validation du club (64,99 € aujourd'hui, mutation et réduction comprises)", async () => {
     await page.goto(dossierUrl);
     await expectText(page, "Frais de mutation");
+    await expectText(page, "Habitant de Lyon");
     await page.getByRole("radio", { name: /3×/ }).click();
     await expectText(page, "64,99");
     await page.getByTestId("balance-clause").check();
@@ -163,8 +165,10 @@ try {
   });
   await step("Validation : le club ajoute la mutation et envoie la demande de paiement", async () => {
     const picker = club.getByTestId("fee-picker");
-    await picker.getByLabel(/Frais de mutation/).check();
-    await expectText(club, "180,00");
+    await picker.getByRole("checkbox", { name: /Frais de mutation/ }).check();
+    await picker.getByTestId("amount-Frais de mutation").fill("40");
+    await expectText(club, "Justificatif fourni");
+    await expectText(club, "180,00"); // 150 + 40 (mutation ajustée) - 10 (commune, justificatif fourni)
     await shot(club, "23-club-validation-montant");
     await club.getByRole("button", { name: "✓ Valider et envoyer la demande de paiement" }).click();
     await expectText(club, "la demande de paiement est envoyée à la famille");

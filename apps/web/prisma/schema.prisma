@@ -62,6 +62,8 @@ enum DocumentType {
   PARENTAL_AUTHORIZATION
   PROOF_OF_ADDRESS
   IMAGE_RIGHTS
+  ARS_CERTIFICATE
+  PASS_SPORT
   OTHER
 }
 
@@ -676,6 +678,8 @@ model ClubFee {
   kind        String   @default("SUPPLEMENT")
   /// proof the family must give for a reduction, e.g. "Code Pass'Sport" (checked by the club)
   proofLabel  String?
+  /// document the family uploads to claim the reduction (PROOF_OF_ADDRESS, ARS_CERTIFICATE, PASS_SPORT…)
+  proofDocType String?
   /// true: added to every licence; false: chosen by the family (or added by the secretary)
   mandatory   Boolean  @default(false)
   active      Boolean  @default(true)

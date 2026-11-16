@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PlayerPhoto } from "@/components/player-photo";
 import type { Prisma, RegistrationStatus } from "@prisma/client";
 import { Search, Send } from "lucide-react";
 import { prisma } from "@/server/db";
@@ -34,7 +35,7 @@ export default async function Files({ searchParams }: { searchParams: Promise<Re
   const where: Prisma.RegistrationWhereInput = { ...base, ...(special[tab.key] ?? {}), ...(tab.statuses ? { status: { in: tab.statuses } } : {}), ...(sp.categorie ? { categoryId: sp.categorie } : {}), ...(sp.paiement ? { paymentStatus: sp.paiement as never } : {}) };
   if (sp.q) where.child = { OR: [{ firstName: { contains: sp.q, mode: "insensitive" } }, { lastName: { contains: sp.q, mode: "insensitive" } }] };
   const [regs, counts, categories, seasons] = await Promise.all([
-    prisma.registration.findMany({ where, include: { child: { include: { family: { include: { guardians: { take: 1 } } } } }, category: true }, orderBy: [{ updatedAt: "desc" }], take: 300 }),
+    prisma.registration.findMany({ where, include: { child: { include: { documents: { where: { type: "PHOTO", deletedAt: null, status: { not: "REJECTED" } }, orderBy: { createdAt: "desc" }, take: 1, select: { id: true, mimeType: true } }, family: { include: { guardians: { take: 1 } } } } }, category: true }, orderBy: [{ updatedAt: "desc" }], take: 300 }),
     prisma.registration.groupBy({ by: ["status"], where: base, _count: true }),
     prisma.category.findMany({ where: { clubId, season }, orderBy: { birthYearMax: "desc" } }),
     prisma.registration.findMany({ where: { clubId }, distinct: ["season"], select: { season: true } }),
@@ -67,7 +68,7 @@ export default async function Files({ searchParams }: { searchParams: Promise<Re
                 {regs.map((r) => (
                   <tr key={r.id} className="hover:bg-chalk">
                     <td className="p-3"><input type="checkbox" name="ids" value={r.id} className="accent-pitch-700" aria-label="Sélectionner" /></td>
-                    <td className="p-3"><Link href={`/club/dossiers/${r.id}`} className="font-semibold hover:underline">{r.child.lastName.toUpperCase()} {r.child.firstName}</Link><p className="text-xs text-muted">{r.child.family.guardians[0]?.phone ?? ""}</p></td>
+                    <td className="p-3"><div className="flex items-center gap-3"><PlayerPhoto photo={r.child.documents[0]} firstName={r.child.firstName} lastName={r.child.lastName} /><div><Link href={`/club/dossiers/${r.id}`} className="font-semibold hover:underline">{r.child.lastName.toUpperCase()} {r.child.firstName}</Link><p className="text-xs text-muted">{r.child.family.guardians[0]?.phone ?? ""}</p></div></div></td>
                     <td className="p-3">{r.category.name}</td>
                     <td className="p-3"><RegistrationBadge status={r.status} /><div className="mt-1.5 w-24"><Progress value={r.progress} /></div></td>
                     <td className="max-w-56 p-3 text-xs text-muted">{r.missingSummary.slice(0, 2).join(" · ") || "—"}{r.missingSummary.length > 2 ? ` +${r.missingSummary.length - 2}` : ""}</td>

@@ -75,9 +75,9 @@ export async function seedDemo(prisma: PrismaClient) {
     await prisma.category.createMany({ data: defaultFootballCategories(start).map((cat) => ({ ...cat, clubId: created.id, season, capacity: 40 })) });
     await prisma.clubFee.createMany({ data: [
       { clubId: created.id, label: "Frais de mutation", amountCents: 3000, description: "Ajoutés par le club si le joueur était licencié dans un autre club la saison dernière.", mandatory: false },
-      { clubId: created.id, label: `Habitant de ${c.city}`, amountCents: 1000, kind: "REDUCTION", proofLabel: "Justificatif de domicile", description: "Réduction pour les familles habitant la ville.", mandatory: false },
-      { clubId: created.id, label: "ARS (allocation de rentrée scolaire)", amountCents: 3000, kind: "REDUCTION", proofLabel: "Attestation CAF", description: "L'attestation arrive en août : payez maintenant, la réduction sera déduite de vos prochaines échéances.", mandatory: false },
-      { clubId: created.id, label: "Pass'Sport", amountCents: 5000, kind: "REDUCTION", proofLabel: "Code Pass'Sport", description: "Indiquez votre code Pass'Sport dès que vous le recevez.", mandatory: false },
+      { clubId: created.id, label: `Habitant de ${c.city}`, amountCents: 1000, kind: "REDUCTION", proofLabel: "Justificatif de domicile de moins de 3 mois", proofDocType: "PROOF_OF_ADDRESS", description: "Appliquée par le club après vérification de l'adresse.", mandatory: false },
+      { clubId: created.id, label: "ARS (allocation de rentrée scolaire)", amountCents: 3000, kind: "REDUCTION", proofLabel: "Attestation ARS de la CAF", proofDocType: "ARS_CERTIFICATE", description: "Appliquée par le club à réception de l'attestation (même en août : déduite des échéances restantes).", mandatory: false },
+      { clubId: created.id, label: "Pass'Sport", amountCents: 5000, kind: "REDUCTION", proofLabel: "Attestation / code Pass'Sport", proofDocType: "PASS_SPORT", description: "Appliquée par le club à réception du code Pass'Sport.", mandatory: false },
     ] });
     if (i === 0) await prisma.category.createMany({ data: defaultFootballCategories(start + 1).map((cat) => ({ ...cat, clubId: created.id, season: seasonLabel(start + 1), capacity: 40 })) });
     for (const [pi, p] of products.entries()) {

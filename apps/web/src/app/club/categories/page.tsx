@@ -67,6 +67,7 @@ export default async function Categories({ searchParams }: { searchParams: Promi
           <Input name="label" placeholder="Ex : Frais de mutation, Pass'Sport…" required />
           <Input name="amount" placeholder="Montant €" inputMode="decimal" required />
           <Select name="mandatory" defaultValue="no"><option value="no">Au choix de la famille</option><option value="yes">Obligatoire (suppléments)</option></Select>
+          <div className="sm:col-span-4"><Select name="proofDocType" defaultValue=""><option value="">Réductions : document à déposer par la famille… (aucun)</option><option value="PROOF_OF_ADDRESS">Justificatif de domicile (moins de 3 mois)</option><option value="ARS_CERTIFICATE">Attestation ARS (CAF)</option><option value="PASS_SPORT">Pass'Sport</option><option value="OTHER">Autre justificatif</option></Select></div>
           <div className="sm:col-span-4"><Input name="proofLabel" placeholder="Réductions : justificatif demandé (ex : Code Pass'Sport, Attestation CAF ARS, Justificatif de domicile)" /></div>
           <div className="sm:col-span-4"><Textarea name="description" placeholder="Explication pour les familles (facultatif) : ex. si le joueur était licencié dans un autre club la saison dernière" className="min-h-16" /></div>
           <div><SubmitButton>Ajouter</SubmitButton></div>

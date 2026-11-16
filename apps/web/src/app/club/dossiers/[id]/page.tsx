@@ -5,11 +5,12 @@ import { prisma } from "@/server/db";
 import { clubContext } from "@/lib/guards";
 import { getRegistration, computeCompleteness, extrasOf } from "@/server/services/registrations";
 import { FeePicker } from "@/components/fee-picker";
-import { Alert, Card, PageHeader, RegistrationBadge, PaymentBadge, Progress, Badge, formatDate, formatDateTime, Textarea, Input, Field } from "@/components/ui";
+import { PlayerPhoto } from "@/components/player-photo";
+import { Alert, Card, PageHeader, RegistrationBadge, PaymentBadge, Progress, Badge, formatDate, formatDateTime, Textarea, Input, Field, Select } from "@/components/ui";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { InstallmentsTable } from "@/components/installments-table";
 import { DocThumb } from "@/components/doc-thumb";
-import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction, checkFffAction, footclubsDoneAction, offlinePaymentAction, confirmReductionAction } from "@/app/actions/club";
+import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction, checkFffAction, footclubsDoneAction, offlinePaymentAction, confirmReductionAction, addReductionAfterPaymentAction } from "@/app/actions/club";
 import { FFF_ITEMS } from "@/server/services/footclubs";
 
 export const metadata = { title: "Dossier" };
@@ -32,6 +33,7 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
   const sendsPayment = r.status !== "VALIDATED" && r.club.payAfterCheck && r.paymentStatus === "UNPAID" && !payment;
   return (
     <>
+      <div className="mb-3"><PlayerPhoto size="lg" photo={docs.find((d) => d.type === "PHOTO" && d.status !== "REJECTED")} firstName={r.child.firstName} lastName={r.child.lastName} /></div>
       <PageHeader eyebrow={`Dossier · ${r.season}`} title={`${r.child.lastName.toUpperCase()} ${r.child.firstName}`} subtitle={`${r.category.name} · ${ageAt(r.child.birthDate)} ans · catégorie fédérale attendue : ${expectedCat}`} action={<div className="flex gap-2"><RegistrationBadge status={r.status} /><PaymentBadge status={r.paymentStatus} /></div>} />
       {docMsg === "refuse" && <div className="mb-4"><Alert tone="warning">Document refusé. La famille a été prévenue (notification et email) et peut le renvoyer depuis son dossier.</Alert></div>}
       {docMsg === "valide" && <div className="mb-4"><Alert tone="success">Document validé.</Alert></div>}
@@ -59,7 +61,7 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
           <Card className="p-5">
             <h2 className="font-display text-lg font-bold">Documents</h2>
             <ul className="mt-3 space-y-3">
-              {c.requiredUploads.map((t) => {
+              {[...c.requiredUploads, ...(["PROOF_OF_ADDRESS", "ARS_CERTIFICATE", "PASS_SPORT"] as const).filter((t) => !c.requiredUploads.includes(t) && docs.some((x) => x.type === t))].map((t) => {
                 const d = docs.find((x) => x.type === t);
                 return (
                   <li key={t} className="rounded-xl border border-line p-4">
@@ -117,7 +119,7 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
               <ActionForm action={decisionAction} className="mt-3 space-y-3">
                 <input type="hidden" name="registrationId" value={r.id} />
                 <Field label="Motif / message à la famille" name="reason" hint="Obligatoire pour un refus ou une demande de modification"><Textarea name="reason" placeholder="Ex : la photo doit être de face, sur fond clair." /></Field>
-                {sendsPayment && fees.length > 0 && <FeePicker base={r.category.priceCents} fees={fees.map((f) => ({ id: f.id, label: f.label, amountCents: f.amountCents, kind: f.kind, mandatory: f.mandatory }))} chosen={[...chosen]} pendingIds={extrasOf(r.extras).filter((e) => e.pending).map((e) => e.id).concat(fees.filter((f) => f.kind === "REDUCTION" && f.proofLabel && !chosen.has(f.id)).map((f) => f.id))} />}
+                {sendsPayment && fees.length > 0 && <FeePicker base={r.category.priceCents} fees={fees.map((f) => ({ id: f.id, label: f.label, amountCents: f.amountCents, kind: f.kind, mandatory: f.mandatory, proofAsked: !!f.proofDocType, proofDocId: f.proofDocType ? docs.find((d) => d.type === f.proofDocType && d.status !== "REJECTED")?.id ?? null : null }))} chosen={[...chosen]} pendingIds={[]} />}
                 <div className="grid gap-2">
                   {r.status !== "VALIDATED" && <button name="decision" value="VALIDATE" disabled={c.state !== "COMPLETE" || (r.club.footclubsMode && r.fffStatus !== "OK")} className="h-11 rounded-xl bg-pitch-800 text-sm font-semibold text-white disabled:opacity-40">{r.club.payAfterCheck && r.paymentStatus === "UNPAID" ? "✓ Valider et envoyer la demande de paiement" : "✓ Valider le dossier"}</button>}
                   <button name="decision" value="REQUEST_CHANGES" className="h-11 rounded-xl border-2 border-pitch-700 bg-white text-sm font-semibold text-pitch-800">↩ Demander une correction à la famille</button>
@@ -203,6 +205,15 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
               ))}
               <div className="flex justify-between border-t border-line pt-1 font-bold"><dt>Total pour le club</dt><dd>{formatEUR(r.licenseFeeCents)}</dd></div>
             </dl>
+            {payment && !closed && fees.some((f) => f.kind === "REDUCTION" && !chosen.has(f.id)) && (
+              <ActionForm action={addReductionAfterPaymentAction} className="mt-3 space-y-2 rounded-xl bg-chalk p-3" data-testid="late-reduction">
+                <p className="text-sm font-semibold">Justificatif reçu plus tard (ARS, Pass'Sport…) ?</p>
+                <input type="hidden" name="registrationId" value={r.id} />
+                <Select name="feeId" className="h-10">{fees.filter((f) => f.kind === "REDUCTION" && !chosen.has(f.id)).map((f) => <option key={f.id} value={f.id}>{f.label} (-{formatEUR(f.amountCents)})</option>)}</Select>
+                <SubmitButton size="sm" variant="outline">Appliquer la réduction</SubmitButton>
+                <p className="text-xs text-muted">Déduite des dernières échéances ; si tout est déjà payé, remboursée sur la carte.</p>
+              </ActionForm>
+            )}
             {canEditExtras && !sendsPayment && (
               <ActionForm action={setExtrasAction} className="mt-3 space-y-2">
                 <input type="hidden" name="registrationId" value={r.id} />
