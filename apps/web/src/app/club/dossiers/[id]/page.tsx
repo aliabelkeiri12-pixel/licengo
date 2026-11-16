@@ -128,7 +128,7 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
                     <button name="decision" value="REJECT" className="mt-2 h-10 w-full rounded-xl bg-danger text-sm font-semibold text-white">Refuser l'inscription</button>
                   </details>
                 )}
-                {c.state !== "COMPLETE" ? <p className="text-xs text-muted">La validation est possible dès que le dossier est complet.</p> : r.club.footclubsMode && r.fffStatus !== "OK" ? <p className="text-xs text-muted">Vérifiez d'abord le formulaire FFF (cadre au-dessus).</p> : null}
+                {c.state !== "COMPLETE" ? <p className="text-xs text-muted">La validation est possible dès que le dossier est complet.</p> : r.club.footclubsMode && r.fffStatus !== "OK" ? <p className="text-xs text-muted">Vérifiez d'abord le formulaire FFF (cadre « Formulaire FFF » ci-dessous).</p> : null}
               </ActionForm>
             </Card>
           )}
