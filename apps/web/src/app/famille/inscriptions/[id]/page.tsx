@@ -74,19 +74,29 @@ export default async function RegistrationPage({ params, searchParams }: { param
   const otherIssues = c.issues.filter((i) => !i.code.startsWith("DOC_"));
   const rejected = docs.filter((d) => d.status === "REJECTED" && c.requiredUploads.includes(d.type as never));
 
-  const uploadItem = (t: (typeof c.requiredUploads)[number]) => {
-                  const doc = docs.find((d) => d.type === t);
-                  const ok = doc && doc.status !== "REJECTED" && !c.issues.some((i) => i.code.endsWith(t));
-                  return (
-                    <li key={t} className="rounded-xl border border-line p-4">
-                      <p className="flex items-center gap-2 font-semibold">{ok ? <CheckCircle2 className="h-5 w-5 text-pitch-600" /> : <Circle className="h-5 w-5 text-muted" />}{DOCUMENT_LABELS[t]}</p>
-                      {doc?.status === "REJECTED" ? (
-                        <p className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-danger"><b>Refusé par le club :</b> {doc.rejectReason}<br /><span className="text-ink">Envoyez un nouveau document ci-dessous, il remplacera l'ancien.</span></p>
-                      ) : doc && <div className="mt-3"><DocumentRow doc={doc} canDelete={editable} /></div>}
-                      {!closed && !ok && <div className="mt-3"><DocumentUploader childId={r.childId} registrationId={r.id} type={t} withExpiry={t === "MEDICAL_CERTIFICATE"} /></div>}
-                    </li>
-                  );
-                };
+  type UT = (typeof c.requiredUploads)[number];
+  const uploadOk = (t: UT) => { const doc = docs.find((d) => d.type === t); return !!doc && doc.status !== "REJECTED" && !c.issues.some((i) => i.code.endsWith(t)); };
+  const uploadBody = (t: UT) => {
+    const doc = docs.find((d) => d.type === t);
+    return (
+      <>
+        {doc?.status === "REJECTED" ? (
+          <p className="rounded-lg bg-red-50 p-3 text-sm text-danger"><b>Refusé par le club :</b> {doc.rejectReason}<br /><span className="text-ink">Envoyez un nouveau document ci-dessous, il remplacera l'ancien.</span></p>
+        ) : doc && <DocumentRow doc={doc} canDelete={editable} />}
+        {!closed && !uploadOk(t) && <div className="mt-3"><DocumentUploader childId={r.childId} registrationId={r.id} type={t} withExpiry={t === "MEDICAL_CERTIFICATE"} /></div>}
+      </>
+    );
+  };
+  const rulesSigned = c.missingSignatures.length === 0;
+  const imageSigned = r.signatures.some((x) => x.type === "IMAGE_RIGHTS");
+  const signerName = `${u.firstName} ${u.lastName}`;
+  const steps: { key: string; title: string; done: boolean; body: React.ReactNode }[] = [];
+  if (c.requiredUploads.includes("PHOTO")) steps.push({ key: "photo", title: "Photo d'identité", done: uploadOk("PHOTO"), body: uploadBody("PHOTO") });
+  if (c.requiredSignatures.length > 0) steps.push({ key: "rules", title: "Charte du club", done: rulesSigned, body: rulesSigned ? <p className="text-sm text-muted">✓ Signée le {formatDateTime(r.signatures.find((x) => x.type !== "IMAGE_RIGHTS")?.signedAt ?? new Date())}</p> : !closed && <SignAll part="rules" registrationId={r.id} needsHealth={needsHealth} healthAnswer={r.healthAnswer} items={signItems} imageRightsText={SIGN_TEXT.IMAGE_RIGHTS} signerName={signerName} /> });
+  steps.push({ key: "image", title: "Droit à l'image", done: imageSigned, body: imageSigned ? <p className="text-sm text-muted">✓ Votre choix : {r.imageRightsOk ? "j'accepte" : "je refuse"}</p> : !closed && <SignAll part="image" registrationId={r.id} needsHealth={false} healthAnswer={r.healthAnswer} items={[]} imageRightsText={SIGN_TEXT.IMAGE_RIGHTS} signerName={signerName} /> });
+  if (c.requiredUploads.includes("MEDICAL_CERTIFICATE")) steps.push({ key: "medical", title: "Certificat médical", done: uploadOk("MEDICAL_CERTIFICATE"), body: uploadBody("MEDICAL_CERTIFICATE") });
+  for (const t of c.requiredUploads.filter((x) => x !== "PHOTO" && x !== "MEDICAL_CERTIFICATE")) steps.push({ key: t, title: DOCUMENT_LABELS[t], done: uploadOk(t), body: uploadBody(t) });
+  const nextStep = steps.find((x) => !x.done)?.key;
   return (
     <>
       <PageHeader eyebrow={`${r.club.name} · Saison ${r.season}`} title={`Inscription de ${r.child.firstName}`} subtitle={r.club.payAfterCheck && !r.paymentRequestedAt ? `${r.category.name} · montant envoyé par le club après vérification` : `${r.category.name} · ${formatEUR(r.licenseFeeCents + r.platformFeeCents)} à payer`} />
@@ -153,16 +163,24 @@ export default async function RegistrationPage({ params, searchParams }: { param
                   )}
               </div>
             ) : (
-              <ul className="space-y-3">{c.requiredUploads.filter((t) => t !== "MEDICAL_CERTIFICATE").map(uploadItem)}</ul>
+              <ol className="space-y-3" data-testid="dossier-steps">
+                {steps.map((st, i) => (
+                  <li key={st.key} className={cx("rounded-xl border p-4", st.key === nextStep ? "border-volt-500 bg-white" : "border-line")} data-testid={`etape-${st.key}`}>
+                    <p className="flex items-center gap-3 font-semibold">
+                      <span className={cx("grid h-7 w-7 shrink-0 place-items-center rounded-full text-sm font-black", st.done ? "bg-pitch-700 text-white" : st.key === nextStep ? "bg-volt-500 text-pitch-950" : "bg-chalk text-muted")}>{st.done ? "✓" : i + 1}</span>
+                      <span><span className="block text-[11px] font-bold uppercase tracking-wider text-muted">Étape {i + 1}</span>{st.title}</span>
+                    </p>
+                    {(st.key === nextStep || st.done || steps.findIndex((x) => x.key === nextStep) > i) && <div className="mt-3">{st.body}</div>}
+                  </li>
+                ))}
+              </ol>
             )}
-            <div className="mt-4">
-              {signDone ? (
-                <p className="rounded-xl bg-chalk p-3 text-sm text-muted">✓ Charte signée par {r.signatures[0]?.signerName} le {r.signatures[0] && formatDateTime(r.signatures[0].signedAt)} · droit à l'image : {r.imageRightsOk ? "accepté" : "refusé"}.</p>
-              ) : !closed && (
-                <SignAll registrationId={r.id} needsHealth={needsHealth} healthAnswer={r.healthAnswer} items={signItems} imageRightsText={SIGN_TEXT.IMAGE_RIGHTS} signerName={`${u.firstName} ${u.lastName}`} />
-              )}
-            </div>
-            {!fffMode && c.requiredUploads.includes("MEDICAL_CERTIFICATE") && <ul className="mt-4 space-y-3">{uploadItem("MEDICAL_CERTIFICATE")}</ul>}
+            {fffMode && (
+              <div className="mt-4">
+                {signDone ? <p className="rounded-xl bg-chalk p-3 text-sm text-muted">✓ Charte signée · droit à l'image : {r.imageRightsOk ? "accepté" : "refusé"}.</p>
+                  : !closed && <SignAll registrationId={r.id} needsHealth={needsHealth} healthAnswer={r.healthAnswer} items={signItems} imageRightsText={SIGN_TEXT.IMAGE_RIGHTS} signerName={signerName} />}
+              </div>
+            )}
             {proofFees.length > 0 && !closed && (
               <div className="mt-4 rounded-xl border border-dashed border-pitch-600 p-4" data-testid="reductions">
                 <p className="font-semibold">Vos réductions <span className="text-sm font-normal text-muted">(facultatif)</span></p>

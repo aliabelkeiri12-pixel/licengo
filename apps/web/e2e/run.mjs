@@ -62,25 +62,35 @@ try {
     await page.getByTestId("payment-locked").waitFor(); // pas de paiement possible tant que le dossier est incomplet
     if (await page.getByRole("button", { name: /Payer/ }).count()) throw new Error("bouton Payer visible sur un dossier incomplet");
   });
-  await step("Mon dossier : photo + certificat médical", async () => {
-    await page.setInputFiles('[data-testid="file-PHOTO"]', path.join(tmp, "photo.png"));
-    await page.waitForSelector('[data-testid="file-PHOTO"]', { state: "detached", timeout: 15000 });
-    await page.setInputFiles('[data-testid="file-MEDICAL_CERTIFICATE"]', path.join(tmp, "identite.pdf"));
-    await page.waitForSelector('[data-testid="file-MEDICAL_CERTIFICATE"]', { state: "detached", timeout: 15000 });
-  });
-  await step("Mon dossier : charte du club + droit à l'image (une seule signature)", async () => {
-    if (await page.getByTestId("health-ALL_NO").count()) throw new Error("questionnaire de santé affiché alors que le club ne le demande pas");
-    await page.getByTestId("read-all").check();
-    await page.getByTestId("image-yes").check();
-    const pad = page.getByTestId("sigpad-all");
+  const draw = async (id) => {
+    const pad = page.getByTestId(id);
     await pad.scrollIntoViewIfNeeded();
     const b = await pad.boundingBox();
     await page.mouse.move(b.x + 20, b.y + 60); await page.mouse.down();
     for (let i = 0; i < 12; i++) await page.mouse.move(b.x + 30 + i * 18, b.y + 40 + (i % 2) * 40);
     await page.mouse.up();
+  };
+  await step("Étape 1 : photo d'identité", async () => {
+    if (await page.getByTestId("health-ALL_NO").count()) throw new Error("questionnaire de santé affiché alors que le club ne le demande pas");
+    await page.setInputFiles('[data-testid="file-PHOTO"]', path.join(tmp, "photo.png"));
+    await page.waitForSelector('[data-testid="file-PHOTO"]', { state: "detached", timeout: 15000 });
+  });
+  await step("Étape 2 : charte du club (lue et signée)", async () => {
+    await page.getByTestId("read-all").check();
+    await draw("sigpad-rules");
     await shot(page, "06-signature");
-    await page.getByRole("button", { name: "Signer et continuer" }).click();
-    await page.getByTestId("sigpad-all").waitFor({ state: "detached", timeout: 15000 });
+    await page.getByRole("button", { name: "Signer la charte" }).click();
+    await page.getByTestId("sigpad-rules").waitFor({ state: "detached", timeout: 15000 });
+  });
+  await step("Étape 3 : droit à l'image", async () => {
+    await page.getByTestId("image-yes").check();
+    await draw("sigpad-image");
+    await page.getByRole("button", { name: "Valider mon choix" }).click();
+    await page.getByTestId("sigpad-image").waitFor({ state: "detached", timeout: 15000 });
+  });
+  await step("Étape 4 : certificat médical", async () => {
+    await page.setInputFiles('[data-testid="file-MEDICAL_CERTIFICATE"]', path.join(tmp, "identite.pdf"));
+    await page.waitForSelector('[data-testid="file-MEDICAL_CERTIFICATE"]', { state: "detached", timeout: 15000 });
   });
   await step("Réduction commune : la famille dépose son justificatif de domicile", async () => {
     await page.getByTestId("reductions").scrollIntoViewIfNeeded();
@@ -186,6 +196,10 @@ try {
     const res = await page.request.get(BASE + href);
     if (res.headers()["content-type"] !== "application/pdf" || !(await res.body()).subarray(0, 5).equals(Buffer.from("%PDF-"))) throw new Error("PDF invalide");
     await shot(page, "17-mes-paiements");
+    await page.goto(`${BASE}/famille/factures`);
+    await expectText(page, "Mes factures");
+    if ((await page.getByTestId("invoice-print").count()) < 1) throw new Error("onglet Factures vide");
+    await shot(page, "18-factures");
   });
   await mobile.close();
   await step("Commande boutique côté club", async () => {

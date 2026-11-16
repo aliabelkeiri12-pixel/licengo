@@ -255,9 +255,10 @@ export async function signAllAction(_: ActionState, fd: FormData): Promise<Actio
     await assertFamilyAccess(u, registrationId);
     const health = str(fd, "healthAnswer");
     if (health) await setHealthAnswer(u, registrationId, z.enum(["ALL_NO", "SOME_YES"]).parse(health));
-    if (fd.get("readAll") !== "on") throw new AppError("Cochez la case pour confirmer avoir lu les documents");
+    const part = str(fd, "part") || "all"; // "rules": club charter only · "image": image rights only
+    if (part !== "image" && fd.get("readAll") !== "on") throw new AppError("Cochez la case pour confirmer avoir lu les documents");
     const imageRights = str(fd, "imageRights");
-    if (!["yes", "no"].includes(imageRights)) throw new AppError("Indiquez si vous acceptez le droit à l'image");
+    if (part !== "rules" && !["yes", "no"].includes(imageRights)) throw new AppError("Indiquez si vous acceptez le droit à l'image");
     const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(str(fd, "signature"));
     if (!m) throw new AppError("Merci de signer dans le cadre");
     const buf = Buffer.from(m[1], "base64");
@@ -267,8 +268,8 @@ export async function signAllAction(_: ActionState, fd: FormData): Promise<Actio
     const base = { signerName: str(fd, "signerName"), imageKey, ip: info.ip, userAgent: info.userAgent.slice(0, 250) };
     // requirements are always computed server-side, never trusted from the browser
     const c = await computeCompleteness(await getRegistration(registrationId));
-    for (const t of c.requiredSignatures) await signDocument(u, registrationId, t as SignatureType, { ...base, accepted: true });
-    await signDocument(u, registrationId, "IMAGE_RIGHTS", { ...base, accepted: imageRights === "yes" });
+    if (part !== "image") for (const t of c.requiredSignatures) await signDocument(u, registrationId, t as SignatureType, { ...base, accepted: true });
+    if (part !== "rules") await signDocument(u, registrationId, "IMAGE_RIGHTS", { ...base, accepted: imageRights === "yes" });
     revalidatePath(`/famille/inscriptions/${registrationId}`);
     return { ok: "Signature enregistrée ✔" };
   });

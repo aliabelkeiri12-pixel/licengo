@@ -13,9 +13,9 @@ export async function familyNav(user: SessionUser) {
   ]);
   const items: NavItem[] = [
     { href: "/famille", label: "Accueil", icon: "Home", exact: true },
-    { href: "/famille/enfants", label: "Enfants", icon: "Users" },
-    { href: "/clubs", label: "Clubs", icon: "Search" },
+    { href: "/clubs", label: "S'inscrire", icon: "Search" },
     { href: "/famille/paiements", label: "Paiements", icon: "CreditCard" },
+    { href: "/famille/factures", label: "Factures", icon: "Receipt" },
     { href: "/famille/notifications", label: "Alertes", icon: "Bell", badge: unread },
   ];
   return { items, cartCount: cart._sum.quantity ?? 0 };

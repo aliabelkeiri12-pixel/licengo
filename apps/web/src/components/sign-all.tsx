@@ -7,7 +7,7 @@ import { Alert, Input, cx } from "./ui";
 type Item = { type: string; label: string; text: string };
 
 /** Health questionnaire + all authorisations + image rights, signed once. */
-export function SignAll({ registrationId, needsHealth, healthAnswer, items, imageRightsText, signerName }: { registrationId: string; needsHealth: boolean; healthAnswer: string | null; items: Item[]; imageRightsText: string; signerName: string }) {
+export function SignAll({ registrationId, needsHealth, healthAnswer, items, imageRightsText, signerName, part = "all" }: { registrationId: string; needsHealth: boolean; healthAnswer: string | null; items: Item[]; imageRightsText: string; signerName: string; part?: "all" | "rules" | "image" }) {
   const [state, action] = useActionState(signAllAction, undefined);
   const [health, setHealth] = useState(healthAnswer ?? "");
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -35,8 +35,9 @@ export function SignAll({ registrationId, needsHealth, healthAnswer, items, imag
     <form action={action} className="space-y-5">
       <input type="hidden" name="registrationId" value={registrationId} />
       <input type="hidden" name="signature" ref={hidden} />
+      <input type="hidden" name="part" value={part} />
 
-      {needsHealth && (
+      {part !== "image" && needsHealth && (
         <fieldset className="rounded-xl border border-line p-4">
           <legend className="px-1 text-sm font-bold">Questionnaire de santé</legend>
           <p className="text-sm text-muted">Remplissez avec votre enfant le questionnaire officiel QS-SPORT. Avez-vous répondu <b>NON à toutes les questions</b> ?</p>
@@ -51,8 +52,8 @@ export function SignAll({ registrationId, needsHealth, healthAnswer, items, imag
         </fieldset>
       )}
 
-      <div className="rounded-xl border border-line p-4">
-        <p className="text-sm font-bold">Documents à approuver</p>
+      {part !== "image" && <div className="rounded-xl border border-line p-4">
+        <p className="text-sm font-bold">{part === "rules" ? "À lire avant de signer" : "Documents à approuver"}</p>
         <ul className="mt-2 divide-y divide-line">
           {visible.map((i) => (
             <li key={i.type} className="py-2 text-sm">
@@ -64,28 +65,28 @@ export function SignAll({ registrationId, needsHealth, healthAnswer, items, imag
           ))}
         </ul>
         <label className="mt-3 flex items-start gap-2 text-sm">
-          <input type="checkbox" name="readAll" required className="mt-0.5 h-4 w-4 accent-pitch-700" data-testid="read-all" /> J'ai lu et j'accepte ces documents.
+          <input type="checkbox" name="readAll" required className="mt-0.5 h-4 w-4 accent-pitch-700" data-testid="read-all" /> J'ai lu et j'accepte {part === "rules" ? "la charte du club" : "ces documents"}.
         </label>
-      </div>
+      </div>}
 
-      <fieldset className="rounded-xl border border-line p-4">
-        <legend className="px-1 text-sm font-bold">Droit à l'image <span className="font-normal text-muted">(facultatif)</span></legend>
+      {part !== "rules" && <fieldset className="rounded-xl border border-line p-4">
+        <legend className="px-1 text-sm font-bold">Droit à l'image</legend>
         <p className="text-xs text-muted">{imageRightsText}</p>
         <div className="mt-2 flex gap-4 text-sm">
           <label className="flex items-center gap-2"><input type="radio" name="imageRights" value="yes" required className="accent-pitch-700" data-testid="image-yes" /> J'accepte</label>
-          <label className="flex items-center gap-2"><input type="radio" name="imageRights" value="no" required className="accent-pitch-700" /> Je refuse</label>
+          <label className="flex items-center gap-2"><input type="radio" name="imageRights" value="no" required className="accent-pitch-700" data-testid="image-no" /> Je refuse</label>
         </div>
-      </fieldset>
+      </fieldset>}
 
       <div>
         <p className="mb-2 text-sm font-bold">Votre signature</p>
         <Input name="signerName" defaultValue={signerName} required aria-label="Nom du signataire" className="mb-2" />
-        <canvas ref={canvas} className="h-36 w-full touch-none rounded-xl border-2 border-dashed border-line bg-white" aria-label="Zone de signature" data-testid="sigpad-all" />
+        <canvas ref={canvas} className="h-36 w-full touch-none rounded-xl border-2 border-dashed border-line bg-white" aria-label="Zone de signature" data-testid={part === "all" ? "sigpad-all" : `sigpad-${part}`} />
         <div className="mt-1 flex justify-between text-xs text-muted"><span>Signez avec le doigt ou la souris</span><button type="button" onClick={clear} className="font-semibold text-pitch-700">Effacer</button></div>
       </div>
       {state?.error && <Alert tone="error">{state.error}</Alert>}
       {state?.ok && <Alert tone="success">{state.ok}</Alert>}
-      <SubmitButton size="lg" variant="volt" className="w-full">Signer et continuer</SubmitButton>
+      <SubmitButton size="lg" variant="volt" className="w-full">{part === "rules" ? "Signer la charte" : part === "image" ? "Valider mon choix" : "Signer et continuer"}</SubmitButton>
     </form>
   );
 }

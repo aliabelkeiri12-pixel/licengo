@@ -51,7 +51,7 @@ export default async function FamilyHome() {
         <section>
           <div className="mb-3 flex items-center justify-between"><h2 className="font-display text-lg font-bold">Mes enfants & licences</h2><Link href="/famille/enfants/nouveau" className="inline-flex items-center gap-1 text-sm font-semibold text-pitch-700"><Plus className="h-4 w-4" /> Ajouter</Link></div>
           {children.length === 0 ? (
-            <EmptyState title="Ajoutez votre premier enfant" text="Ses informations seront réutilisées pour toutes ses inscriptions, chaque saison." action={<LinkButton href="/famille/enfants/nouveau">Ajouter un enfant</LinkButton>} />
+            <EmptyState title="Inscrivez votre premier joueur" text="Choisissez le club, indiquez nom, prénom, date de naissance et catégorie : c'est parti." action={<LinkButton href="/clubs">Inscrire un joueur</LinkButton>} />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               {children.map((c) => {
