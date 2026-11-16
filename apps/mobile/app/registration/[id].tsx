@@ -166,7 +166,7 @@ export default function RegistrationScreen() {
           <Text style={{ fontWeight: "800", fontSize: 18, paddingHorizontal: 16 }}>{signing ? SIGNATURE_LABELS[signing] : ""}</Text>
           <Text style={{ color: colors.muted, paddingHorizontal: 16, marginVertical: 8 }}>Signataire : {signerName}</Text>
           <TextInput editable={false} value={signerName} style={{ display: "none" }} />
-          <SignatureScreen ref={sigRef} onOK={onSignature} descriptionText="Signez dans le cadre" clearText="Effacer" confirmText="Valider" imageType="image/png" webStyle=".m-signature-pad--footer .button{background:#0B3D2E;color:#fff}" />
+          <SignatureScreen ref={sigRef} onOK={onSignature} descriptionText="Signez dans le cadre" clearText="Effacer" confirmText="Valider" imageType="image/png" webStyle=".m-signature-pad--footer .button{background:#0B1426;color:#fff}" />
           <Pressable onPress={() => setSigning(null)} style={{ padding: 20, alignItems: "center" }}><Text style={{ color: colors.danger, fontWeight: "700" }}>Annuler</Text></Pressable>
         </View>
       </Modal>

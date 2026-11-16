@@ -19,7 +19,7 @@ export function SignAll({ registrationId, needsHealth, healthAnswer, items, imag
     const ratio = window.devicePixelRatio || 1;
     c.width = c.offsetWidth * ratio; c.height = c.offsetHeight * ratio;
     const ctx = c.getContext("2d")!;
-    ctx.scale(ratio, ratio); ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.strokeStyle = "#0A2A1F";
+    ctx.scale(ratio, ratio); ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.strokeStyle = "#0B1426";
     let drawing = false;
     const pos = (e: PointerEvent) => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] as const; };
     const down = (e: PointerEvent) => { drawing = true; c.setPointerCapture(e.pointerId); const [x, y] = pos(e); ctx.beginPath(); ctx.moveTo(x, y); };

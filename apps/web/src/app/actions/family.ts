@@ -271,3 +271,13 @@ export async function declareFffAction(fd: FormData) {
   await declareFffForm(u, str(fd, "registrationId"));
   revalidatePath(`/famille/inscriptions/${str(fd, "registrationId")}`);
 }
+
+export async function addReductionProofAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const u = await family();
+    const { addReductionProof } = await import("@/server/services/registrations");
+    await addReductionProof(u, str(fd, "registrationId"), str(fd, "extraId"), str(fd, "proof"));
+    revalidatePath(`/famille/inscriptions/${str(fd, "registrationId")}`);
+    return { ok: "Merci ! Le club va vérifier votre justificatif et appliquer la réduction." };
+  });
+}

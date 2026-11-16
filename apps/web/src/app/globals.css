@@ -1,21 +1,21 @@
 @import "tailwindcss";
 
-/* LICENGO design tokens */
+/* LICENGO design tokens: bleu nuit (fonds) + vert vif (actions, validations) */
 @theme {
-  --color-pitch-950: #04130D;
-  --color-pitch-900: #0A2A1F;
-  --color-pitch-800: #0B3D2E;
-  --color-pitch-700: #12523E;
-  --color-pitch-600: #1B6B52;
-  --color-pitch-100: #DDEFE7;
-  --color-pitch-50: #EEF7F2;
-  --color-volt-400: #D4FA4F;
-  --color-volt-500: #C6F432;
-  --color-volt-600: #A6D11A;
-  --color-chalk: #F6F5F1;
-  --color-ink: #0E1512;
-  --color-muted: #5B6B64;
-  --color-line: #E3E6E1;
+  --color-pitch-950: #060B17;
+  --color-pitch-900: #0B1426;
+  --color-pitch-800: #1E9E46;
+  --color-pitch-700: #17843A;
+  --color-pitch-600: #22B14F;
+  --color-pitch-100: #D5F3DE;
+  --color-pitch-50: #EBFAF0;
+  --color-volt-400: #63E383;
+  --color-volt-500: #35CF5B;
+  --color-volt-600: #22B14C;
+  --color-chalk: #F3F5F9;
+  --color-ink: #0B1220;
+  --color-muted: #5A6478;
+  --color-line: #E3E7EF;
   --color-danger: #C2362B;
   --color-warning: #C77700;
   --color-info: #1F5FBF;

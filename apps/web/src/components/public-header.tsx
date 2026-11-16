@@ -18,7 +18,7 @@ export async function PublicHeader({ dark = false }: { dark?: boolean }) {
           ) : (
             <>
               <Link href="/connexion" className={`rounded-lg px-3 py-2 text-sm font-semibold ${dark ? "text-white" : "text-ink"}`}>Connexion</Link>
-              <Link href="/inscription" className={buttonClass("volt", "sm")}>Créer un compte</Link>
+              <Link href="/inscription" className={`${buttonClass("volt", "sm")} whitespace-nowrap`}><span className="sm:hidden">S'inscrire</span><span className="hidden sm:inline">Créer un compte</span></Link>
             </>
           )}
         </nav>

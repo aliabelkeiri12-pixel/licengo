@@ -59,7 +59,7 @@ export default async function FamilyHome() {
                 return (
                   <Card key={c.id} className="p-5">
                     <div className="flex items-center gap-3">
-                      <span className="grid h-11 w-11 place-items-center rounded-full bg-pitch-800 font-display text-lg font-bold text-volt-400">{c.firstName[0]}</span>
+                      <span className="grid h-11 w-11 place-items-center rounded-full bg-pitch-900 font-display text-lg font-bold text-volt-400">{c.firstName[0]}</span>
                       <div><Link href={`/famille/enfants/${c.id}`} className="font-bold hover:underline">{c.firstName} {c.lastName}</Link><p className="text-xs text-muted">Né{c.gender === "F" ? "e" : ""} le {formatDate(c.birthDate)}</p></div>
                     </div>
                     {r ? (

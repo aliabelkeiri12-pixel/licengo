@@ -13,7 +13,7 @@ export function ConsoleFrame({ items, title, subtitle, accent, children }: { ite
           <div className="md:hidden"><LogoutButton /></div>
         </div>
         <div className="mx-3 mb-3 hidden rounded-xl bg-white/5 p-3 md:block">
-          <div className="flex items-center gap-2"><span className="h-3 w-3 rounded-full" style={{ background: accent ?? "#C6F432" }} /><p className="truncate text-sm font-bold">{title}</p></div>
+          <div className="flex items-center gap-2"><span className="h-3 w-3 rounded-full" style={{ background: accent ?? "#35CF5B" }} /><p className="truncate text-sm font-bold">{title}</p></div>
           {subtitle && <p className="mt-0.5 truncate text-xs text-white/50">{subtitle}</p>}
         </div>
         <SideNav items={items} />

@@ -38,10 +38,12 @@ export async function decisionAction(_: ActionState, fd: FormData): Promise<Acti
       return { ok: "Dossier rouvert : la famille peut renvoyer ses documents" };
     }
     const d = decisionSchema.parse({ decision: fd.get("decision"), reason: str(fd, "reason") || undefined });
+    // fees chosen at validation (transfer fee…) are applied before the payment request is sent
+    if (d.decision === "VALIDATE" && fd.get("withFees") === "1") await setRegistrationExtras(user, str(fd, "registrationId"), fd.getAll("extras").map(String), { notify: false });
     if (d.decision === "REJECT" && fd.get("confirmReject") !== "on") throw new AppError("Cochez la case pour confirmer le refus définitif de l'inscription");
     await decide(user, str(fd, "registrationId"), d.decision, d.reason);
     revalidatePath("/club", "layout");
-    return { ok: { VALIDATE: "Dossier validé, la famille est notifiée.", REJECT: "Dossier refusé.", REQUEST_CHANGES: "Demande de modification envoyée." }[d.decision] };
+    return { ok: { VALIDATE: "Dossier validé : la demande de paiement est envoyée à la famille.", REJECT: "Dossier refusé.", REQUEST_CHANGES: "Demande de modification envoyée." }[d.decision] };
   });
 }
 
@@ -236,7 +238,7 @@ export async function updateClubAction(_: ActionState, fd: FormData): Promise<Ac
       email: z.string().email().optional().or(z.literal("")), phone: z.string().max(20).optional(),
       primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/), reminderEveryDays: z.coerce.number().int().min(1).max(30),
     }).parse(Object.fromEntries(fd));
-    await prisma.club.update({ where: { id: clubId }, data: { ...d, email: d.email || null, footclubsMode: fd.get("footclubsMode") === "on", payAfterCheck: fd.get("payAfterCheck") === "on", dailyDigest: fd.get("dailyDigest") === "on" } });
+    await prisma.club.update({ where: { id: clubId }, data: { ...d, email: d.email || null, footclubsMode: fd.get("footclubsMode") === "on", payAfterCheck: fd.get("payAfterCheck") === "on", dailyDigest: fd.get("dailyDigest") === "on", requiredUploads: fd.getAll("requiredUploads").map(String).filter((t) => ["PHOTO", "ID_DOCUMENT", "MEDICAL_CERTIFICATE", "PROOF_OF_ADDRESS"].includes(t)), requiredSignatures: fd.getAll("requiredSignatures").map(String).filter((t) => ["CLUB_RULES", "PARENTAL_AUTHORIZATION", "HEALTH_QUESTIONNAIRE"].includes(t)) } });
     await audit(user.id, "club.update", "Club", clubId);
     revalidatePath("/club", "layout");
     return { ok: "Paramètres enregistrés" };
@@ -273,10 +275,11 @@ export async function saveClubFeeAction(_: ActionState, fd: FormData): Promise<A
   return safe(async () => {
     const { user, clubId } = await clubWriter("SECRETARY", "TREASURER");
     const d = z.object({ label: z.string().trim().min(2, "Libellé requis").max(60), amount: z.coerce.number().min(0.5).max(1000), description: z.string().trim().max(200).optional() }).parse(Object.fromEntries(fd));
-    await prisma.clubFee.create({ data: { clubId, label: d.label, amountCents: toCents(d.amount), description: d.description || null, mandatory: str(fd, "mandatory") === "yes" } });
+    const kind = str(fd, "kind") === "REDUCTION" ? "REDUCTION" : "SUPPLEMENT";
+    await prisma.clubFee.create({ data: { clubId, label: d.label, amountCents: toCents(d.amount), description: d.description || null, kind, proofLabel: kind === "REDUCTION" ? str(fd, "proofLabel") || null : null, mandatory: kind === "SUPPLEMENT" && str(fd, "mandatory") === "yes" } });
     await audit(user.id, "club.fee_create", "Club", clubId, { label: d.label });
     revalidatePath("/club/categories");
-    return { ok: "Supplément ajouté" };
+    return { ok: kind === "REDUCTION" ? "Réduction ajoutée" : "Supplément ajouté" };
   });
 }
 
@@ -324,5 +327,15 @@ export async function offlinePaymentAction(_: ActionState, fd: FormData): Promis
     await recordOfflinePayment(user, str(fd, "registrationId"), method, str(fd, "note") || undefined);
     revalidatePath("/club", "layout");
     return { ok: "Paiement enregistré : facture envoyée à la famille" };
+  });
+}
+
+export async function confirmReductionAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const { user } = await clubWriter("SECRETARY", "TREASURER");
+    const { confirmReduction } = await import("@/server/services/registrations");
+    await confirmReduction(user, str(fd, "registrationId"), str(fd, "extraId"));
+    revalidatePath("/club", "layout");
+    return { ok: "Réduction appliquée : la famille est prévenue du nouveau montant" };
   });
 }

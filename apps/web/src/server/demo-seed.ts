@@ -5,7 +5,7 @@ import { SPORTS, defaultFootballCategories, seasonStartYear, seasonLabel } from 
 const PASSWORD = "Licengo2026!";
 
 const clubs = [
-  { name: "FC Lyon Est", city: "Lyon", postalCode: "69003", lat: 45.7597, lng: 4.8592, color: "#0B3D2E" },
+  { name: "FC Lyon Est", city: "Lyon", postalCode: "69003", lat: 45.7597, lng: 4.8592, color: "#12306B" },
   { name: "AS Villeurbanne Éveil", city: "Villeurbanne", postalCode: "69100", lat: 45.7719, lng: 4.8902, color: "#1D4ED8" },
   { name: "Olympique Vénissieux", city: "Vénissieux", postalCode: "69200", lat: 45.6975, lng: 4.8867, color: "#B91C1C" },
   { name: "Caluire SC", city: "Caluire-et-Cuire", postalCode: "69300", lat: 45.7953, lng: 4.8467, color: "#7C3AED" },
@@ -68,12 +68,16 @@ export async function seedDemo(prisma: PrismaClient) {
         address: `${10 + i} avenue du Stade`, email: `contact@${slug}.fr`, phone: "0472000000", federationNumber: `5${(40000 + i * 137).toString()}`,
         description: `Club de football familial à ${c.city}. École de foot labellisée, encadrement diplômé, de U7 à Seniors.`,
         status: "ACTIVE", planId: plans[i % 3].id, subscriptionStatus: "active", stripeAccountId: `acct_mock_demo${i}`, stripeChargesEnabled: true,
+        // simple family flow: photo + medical certificate, club charter + image rights; the club checks then asks for payment
+        requiredUploads: ["PHOTO", "MEDICAL_CERTIFICATE"], requiredSignatures: ["CLUB_RULES"], payAfterCheck: true,
       },
     });
     await prisma.category.createMany({ data: defaultFootballCategories(start).map((cat) => ({ ...cat, clubId: created.id, season, capacity: 40 })) });
     await prisma.clubFee.createMany({ data: [
-      { clubId: created.id, label: "Frais de mutation", amountCents: 3000, description: "Si le joueur était licencié dans un autre club la saison dernière.", mandatory: false },
-      { clubId: created.id, label: "Assurance complémentaire", amountCents: 800, description: "Garanties renforcées en cas de blessure (facultatif).", mandatory: false },
+      { clubId: created.id, label: "Frais de mutation", amountCents: 3000, description: "Ajoutés par le club si le joueur était licencié dans un autre club la saison dernière.", mandatory: false },
+      { clubId: created.id, label: `Habitant de ${c.city}`, amountCents: 1000, kind: "REDUCTION", proofLabel: "Justificatif de domicile", description: "Réduction pour les familles habitant la ville.", mandatory: false },
+      { clubId: created.id, label: "ARS (allocation de rentrée scolaire)", amountCents: 3000, kind: "REDUCTION", proofLabel: "Attestation CAF", description: "L'attestation arrive en août : payez maintenant, la réduction sera déduite de vos prochaines échéances.", mandatory: false },
+      { clubId: created.id, label: "Pass'Sport", amountCents: 5000, kind: "REDUCTION", proofLabel: "Code Pass'Sport", description: "Indiquez votre code Pass'Sport dès que vous le recevez.", mandatory: false },
     ] });
     if (i === 0) await prisma.category.createMany({ data: defaultFootballCategories(start + 1).map((cat) => ({ ...cat, clubId: created.id, season: seasonLabel(start + 1), capacity: 40 })) });
     for (const [pi, p] of products.entries()) {

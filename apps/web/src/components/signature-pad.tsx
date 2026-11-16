@@ -18,7 +18,7 @@ export function SignaturePad({ registrationId, type, text, defaultName, allowRef
     c.height = c.offsetHeight * ratio;
     const ctx = c.getContext("2d")!;
     ctx.scale(ratio, ratio);
-    ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.strokeStyle = "#0A2A1F";
+    ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.strokeStyle = "#0B1426";
     let drawing = false;
     const pos = (e: PointerEvent) => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] as const; };
     const down = (e: PointerEvent) => { drawing = true; c.setPointerCapture(e.pointerId); const [x, y] = pos(e); ctx.beginPath(); ctx.moveTo(x, y); };

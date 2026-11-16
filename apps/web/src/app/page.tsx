@@ -97,7 +97,7 @@ export default function Home() {
         <h2 className="font-display text-2xl font-extrabold">Multisport</h2>
         <div className="mt-6 flex flex-wrap gap-3">
           {SPORTS.map((s) => (
-            <span key={s.slug} className={`rounded-full px-4 py-2 text-sm font-semibold ring-1 ${s.active ? "bg-pitch-800 text-white ring-pitch-800" : "bg-white text-muted ring-line"}`}>
+            <span key={s.slug} className={`rounded-full px-4 py-2 text-sm font-semibold ring-1 ${s.active ? "bg-pitch-900 text-white ring-pitch-900" : "bg-white text-muted ring-line"}`}>
               {s.emoji} {s.name} {!s.active && <span className="ml-1 text-xs">· bientôt</span>}
             </span>
           ))}

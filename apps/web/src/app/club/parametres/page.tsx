@@ -39,11 +39,18 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             <Field label="Relance automatique tous les" name="reminderEveryDays" hint="jours, pour les dossiers incomplets"><Input name="reminderEveryDays" type="number" min={1} max={30} defaultValue={club.reminderEveryDays} /></Field>
           </div>
           <div className="space-y-3 rounded-xl bg-chalk p-4">
-            <p className="text-sm font-bold">Fonctionnement des licences</p>
+            <p className="text-sm font-bold">Documents demandés aux familles</p>
+            <p className="-mt-2 text-xs text-muted">Le droit à l'image est toujours proposé (accepter ou refuser). Rien de coché = documents standards du sport.</p>
+            <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
+              {([["requiredUploads", "PHOTO", "Photo d'identité"], ["requiredUploads", "MEDICAL_CERTIFICATE", "Certificat médical"], ["requiredUploads", "ID_DOCUMENT", "Pièce d'identité"], ["requiredUploads", "PROOF_OF_ADDRESS", "Justificatif de domicile"], ["requiredSignatures", "CLUB_RULES", "Charte / règlement du club (signée)"], ["requiredSignatures", "PARENTAL_AUTHORIZATION", "Autorisation parentale (signée)"], ["requiredSignatures", "HEALTH_QUESTIONNAIRE", "Questionnaire de santé (attestation)"]] as const).map(([f, v, l]) => (
+                <label key={v} className="flex items-center gap-2"><input type="checkbox" name={f} value={v} defaultChecked={(club[f] as string[]).includes(v)} className="h-4 w-4 accent-pitch-700" /> {l}</label>
+              ))}
+            </div>
+            <p className="pt-2 text-sm font-bold">Fonctionnement des licences</p>
             <label className="flex items-start gap-3 text-sm"><input type="checkbox" name="footclubsMode" defaultChecked={club.footclubsMode} className="mt-0.5 h-4 w-4 accent-pitch-700" />
               <span><b>Mode Footclubs</b> : les documents de licence (certificat, photo, identité…) sont remplis par le joueur sur le <b>formulaire FFF</b> reçu par email. LICENGO ne les redemande pas : il gère le paiement, la charte du club et la vérification.</span></label>
             <label className="flex items-start gap-3 text-sm"><input type="checkbox" name="payAfterCheck" defaultChecked={club.payAfterCheck} className="mt-0.5 h-4 w-4 accent-pitch-700" />
-              <span><b>Paiement après ma vérification</b> : le joueur ne peut payer qu'une fois son dossier vérifié par le club.</span></label>
+              <span><b>Paiement après ma vérification</b> : la famille envoie son dossier ; vous le vérifiez, ajoutez si besoin les frais de mutation, puis « Valider et envoyer la demande de paiement ». La famille reçoit le montant final par email.</span></label>
             <label className="flex items-start gap-3 text-sm"><input type="checkbox" name="dailyDigest" defaultChecked={club.dailyDigest} className="mt-0.5 h-4 w-4 accent-pitch-700" />
               <span><b>Récapitulatif par email chaque jour</b> : dossiers à vérifier, à valider, à saisir dans Footclubs, paiements reçus. Pas besoin de surveiller les notifications.</span></label>
           </div>

@@ -12,6 +12,7 @@ const png = Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000
 writeFileSync(path.join(tmp, "photo.png"), png);
 writeFileSync(path.join(tmp, "identite.pdf"), Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"));
 
+let dossierUrl, payStep;
 const step = async (name, fn) => { process.stdout.write(`• ${name} … `); const t = Date.now(); await fn(); console.log(`ok (${Date.now() - t} ms)`); };
 const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, `${name}.png`), fullPage: false });
 const expectText = async (page, text, timeout = 15000) => page.getByText(text, { exact: false }).first().waitFor({ timeout });
@@ -65,14 +66,14 @@ try {
     await page.getByTestId("payment-locked").waitFor(); // pas de paiement possible tant que le dossier est incomplet
     if (await page.getByRole("button", { name: /Payer/ }).count()) throw new Error("bouton Payer visible sur un dossier incomplet");
   });
-  await step("Envoi des documents (photo + pièce d'identité)", async () => {
+  await step("Mon dossier : photo + certificat médical", async () => {
     await page.setInputFiles('[data-testid="file-PHOTO"]', path.join(tmp, "photo.png"));
     await page.waitForSelector('[data-testid="file-PHOTO"]', { state: "detached", timeout: 15000 });
-    await page.setInputFiles('[data-testid="file-ID_DOCUMENT"]', path.join(tmp, "identite.pdf"));
-    await page.waitForSelector('[data-testid="file-ID_DOCUMENT"]', { state: "detached", timeout: 15000 });
+    await page.setInputFiles('[data-testid="file-MEDICAL_CERTIFICATE"]', path.join(tmp, "identite.pdf"));
+    await page.waitForSelector('[data-testid="file-MEDICAL_CERTIFICATE"]', { state: "detached", timeout: 15000 });
   });
-  await step("Étape 2 : questionnaire de santé + une seule signature", async () => {
-    await page.getByTestId("health-ALL_NO").check();
+  await step("Mon dossier : charte du club + droit à l'image (une seule signature)", async () => {
+    if (await page.getByTestId("health-ALL_NO").count()) throw new Error("questionnaire de santé affiché alors que le club ne le demande pas");
     await page.getByTestId("read-all").check();
     await page.getByTestId("image-yes").check();
     const pad = page.getByTestId("sigpad-all");
@@ -85,31 +86,27 @@ try {
     await page.getByRole("button", { name: "Signer et continuer" }).click();
     await page.getByTestId("sigpad-all").waitFor({ state: "detached", timeout: 15000 });
   });
-  await step("Dossier transmis automatiquement au club", async () => {
+  await step("Dossier transmis au club, paiement en attente de sa vérification", async () => {
     await expectText(page, "Dossier complet transmis au club");
+    await page.getByTestId("payment-wait-club").waitFor();
     await shot(page, "07-dossier-complet");
   });
-  await step("Paiement en 3 fois (54,99 € aujourd'hui)", async () => {
+  dossierUrl = page.url();
+  payStep = async () => step("Paiement en 3 fois après validation du club (64,99 € aujourd'hui, mutation comprise)", async () => {
+    await page.goto(dossierUrl);
+    await expectText(page, "Frais de mutation");
     await page.getByRole("radio", { name: /3×/ }).click();
-    await expectText(page, "54,99");
+    await expectText(page, "64,99");
     await page.getByTestId("balance-clause").check();
     await shot(page, "08-paiement-echeancier");
-    await page.getByRole("button", { name: /Payer 54,99/ }).click();
+    await page.getByRole("button", { name: /Payer 64,99/ }).click();
     await page.waitForURL("**/paiement/simulation/**");
     await shot(page, "09-page-paiement");
     await page.click('button[type="submit"]');
     await page.waitForURL("**paiement=ok**");
     await expectText(page, "Paiement confirmé");
-  });
-  await step("Mes paiements : échéances et factures PDF", async () => {
-    await page.goto(`${BASE}/famille/paiements`);
-    await expectText(page, "Toutes mes factures");
-    const links = page.getByTestId("invoice-link");
-    if ((await links.count()) !== 1) throw new Error("une seule facture attendue pour la licence");
-    const href = await links.first().getAttribute("href");
-    const res = await page.request.get(BASE + href);
-    if (res.headers()["content-type"] !== "application/pdf" || !(await res.body()).subarray(0, 5).equals(Buffer.from("%PDF-"))) throw new Error("PDF invalide");
-    await shot(page, "17-mes-paiements");
+    await page.goto(`${BASE}/famille/notifications`);
+    await expectText(page, "dossier validé, paiement à régler");
   });
   await step("Boutique : ajout au panier et commande", async () => {
     await page.goto(`${BASE}/boutique/fc-lyon-est`);
@@ -131,10 +128,9 @@ try {
     await expectText(page, "Bonjour Sarah");
     await shot(page, "13-accueil-famille");
     await page.goto(`${BASE}/famille/notifications`);
-    await expectText(page, "Paiement confirmé");
+    await expectText(page, "Notifications");
     await shot(page, "14-notifications");
   });
-  await mobile.close();
 
   // ---------------- CLUB (desktop) ----------------
   const desk = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "fr-FR", ...tls });
@@ -165,10 +161,26 @@ try {
     await expectText(club, "Dossier complet et cohérent");
     await shot(club, "22-club-dossier-detail");
   });
-  await step("Validation du dossier", async () => {
-    await club.getByRole("button", { name: "✓ Valider le dossier" }).click();
-    await expectText(club, "Dossier validé, la famille est notifiée");
+  await step("Validation : le club ajoute la mutation et envoie la demande de paiement", async () => {
+    const picker = club.getByTestId("fee-picker");
+    await picker.getByLabel(/Frais de mutation/).check();
+    await expectText(club, "180,00");
+    await shot(club, "23-club-validation-montant");
+    await club.getByRole("button", { name: "✓ Valider et envoyer la demande de paiement" }).click();
+    await expectText(club, "la demande de paiement est envoyée à la famille");
   });
+  await payStep();
+  await step("Mes paiements : échéances et factures PDF", async () => {
+    await page.goto(`${BASE}/famille/paiements`);
+    await expectText(page, "Toutes mes factures");
+    const links = page.getByTestId("invoice-link");
+    if ((await links.count()) < 1) throw new Error("facture de licence attendue");
+    const href = await links.first().getAttribute("href");
+    const res = await page.request.get(BASE + href);
+    if (res.headers()["content-type"] !== "application/pdf" || !(await res.body()).subarray(0, 5).equals(Buffer.from("%PDF-"))) throw new Error("PDF invalide");
+    await shot(page, "17-mes-paiements");
+  });
+  await mobile.close();
   await step("Commande boutique côté club", async () => {
     await club.goto(`${BASE}/club/boutique`);
     await expectText(club, "Commandes");

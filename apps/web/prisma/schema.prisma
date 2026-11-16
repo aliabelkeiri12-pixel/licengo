@@ -260,9 +260,13 @@ model Club {
   /// Footclubs mode: the FFF collects the licence documents in its own form; LICENGO keeps payment + club papers
   footclubsMode         Boolean    @default(false)
   /// payment opens only once the secretary has checked the file
-  payAfterCheck         Boolean    @default(false)
+  payAfterCheck         Boolean    @default(true)
   /// daily summary e-mail to the club staff
   dailyDigest           Boolean    @default(true)
+  /// documents asked to families (empty = sport defaults): e.g. ["PHOTO","MEDICAL_CERTIFICATE"]
+  requiredUploads       String[]   @default(["PHOTO", "MEDICAL_CERTIFICATE"])
+  /// signatures asked to families (empty = sport defaults): e.g. ["CLUB_RULES"]
+  requiredSignatures    String[]   @default(["CLUB_RULES"])
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
 
@@ -342,6 +346,8 @@ model Registration {
   fffCheckedAt     DateTime?
   /// the licence was entered / validated in Footclubs
   footclubsDoneAt  DateTime?
+  /// the club checked the file and sent the payment request (final amount) to the family
+  paymentRequestedAt DateTime?
   submittedAt      DateTime?
   validatedAt      DateTime?
   lastReminderAt   DateTime?
@@ -666,6 +672,10 @@ model ClubFee {
   label       String
   description String?
   amountCents Int
+  /// SUPPLEMENT (transfer fee, kit…) adds to the price; REDUCTION (town resident, ARS, Pass'Sport…) subtracts
+  kind        String   @default("SUPPLEMENT")
+  /// proof the family must give for a reduction, e.g. "Code Pass'Sport" (checked by the club)
+  proofLabel  String?
   /// true: added to every licence; false: chosen by the family (or added by the secretary)
   mandatory   Boolean  @default(false)
   active      Boolean  @default(true)

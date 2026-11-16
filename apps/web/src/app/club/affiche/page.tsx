@@ -13,7 +13,7 @@ export default async function Poster() {
   const { clubId } = await clubContext();
   const club = await prisma.club.findUniqueOrThrow({ where: { id: clubId }, include: { categories: { where: { season: currentSeason(), open: true }, orderBy: { priceCents: "asc" }, take: 1 } } });
   const url = `${env.appUrl}/clubs/${club.slug}`;
-  const svg = await QRCode.toString(url, { type: "svg", margin: 1, color: { dark: "#04130D", light: "#FFFFFF" } });
+  const svg = await QRCode.toString(url, { type: "svg", margin: 1, color: { dark: "#060B17", light: "#FFFFFF" } });
   const from = club.categories[0]?.priceCents;
   return (
     <div className="mx-auto max-w-[800px] print:max-w-none">

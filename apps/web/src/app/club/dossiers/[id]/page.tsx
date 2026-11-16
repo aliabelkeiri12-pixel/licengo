@@ -4,11 +4,12 @@ import { DOCUMENT_LABELS, SIGNATURE_LABELS, formatEUR, ageAt, footballCategoryFo
 import { prisma } from "@/server/db";
 import { clubContext } from "@/lib/guards";
 import { getRegistration, computeCompleteness, extrasOf } from "@/server/services/registrations";
+import { FeePicker } from "@/components/fee-picker";
 import { Alert, Card, PageHeader, RegistrationBadge, PaymentBadge, Progress, Badge, formatDate, formatDateTime, Textarea, Input, Field } from "@/components/ui";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { InstallmentsTable } from "@/components/installments-table";
 import { DocThumb } from "@/components/doc-thumb";
-import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction, checkFffAction, footclubsDoneAction, offlinePaymentAction } from "@/app/actions/club";
+import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction, checkFffAction, footclubsDoneAction, offlinePaymentAction, confirmReductionAction } from "@/app/actions/club";
 import { FFF_ITEMS } from "@/server/services/footclubs";
 
 export const metadata = { title: "Dossier" };
@@ -28,6 +29,7 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
   const fees = await prisma.clubFee.findMany({ where: { clubId, active: true }, orderBy: { createdAt: "asc" } });
   const chosen = new Set(extrasOf(r.extras).map((e) => e.id));
   const canEditExtras = !closed && !payment && fees.length > 0;
+  const sendsPayment = r.status !== "VALIDATED" && r.club.payAfterCheck && r.paymentStatus === "UNPAID" && !payment;
   return (
     <>
       <PageHeader eyebrow={`Dossier · ${r.season}`} title={`${r.child.lastName.toUpperCase()} ${r.child.firstName}`} subtitle={`${r.category.name} · ${ageAt(r.child.birthDate)} ans · catégorie fédérale attendue : ${expectedCat}`} action={<div className="flex gap-2"><RegistrationBadge status={r.status} /><PaymentBadge status={r.paymentStatus} /></div>} />
@@ -115,8 +117,9 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
               <ActionForm action={decisionAction} className="mt-3 space-y-3">
                 <input type="hidden" name="registrationId" value={r.id} />
                 <Field label="Motif / message à la famille" name="reason" hint="Obligatoire pour un refus ou une demande de modification"><Textarea name="reason" placeholder="Ex : la photo doit être de face, sur fond clair." /></Field>
+                {sendsPayment && fees.length > 0 && <FeePicker base={r.category.priceCents} fees={fees.map((f) => ({ id: f.id, label: f.label, amountCents: f.amountCents, kind: f.kind, mandatory: f.mandatory }))} chosen={[...chosen]} pendingIds={extrasOf(r.extras).filter((e) => e.pending).map((e) => e.id).concat(fees.filter((f) => f.kind === "REDUCTION" && f.proofLabel && !chosen.has(f.id)).map((f) => f.id))} />}
                 <div className="grid gap-2">
-                  {r.status !== "VALIDATED" && <button name="decision" value="VALIDATE" disabled={c.state !== "COMPLETE" || (r.club.footclubsMode && r.fffStatus !== "OK")} className="h-11 rounded-xl bg-pitch-800 text-sm font-semibold text-white disabled:opacity-40">✓ Valider le dossier</button>}
+                  {r.status !== "VALIDATED" && <button name="decision" value="VALIDATE" disabled={c.state !== "COMPLETE" || (r.club.footclubsMode && r.fffStatus !== "OK")} className="h-11 rounded-xl bg-pitch-800 text-sm font-semibold text-white disabled:opacity-40">{r.club.payAfterCheck && r.paymentStatus === "UNPAID" ? "✓ Valider et envoyer la demande de paiement" : "✓ Valider le dossier"}</button>}
                   <button name="decision" value="REQUEST_CHANGES" className="h-11 rounded-xl border-2 border-pitch-700 bg-white text-sm font-semibold text-pitch-800">↩ Demander une correction à la famille</button>
                   <p className="text-xs text-muted">La famille reçoit votre message et peut renvoyer ses documents depuis son espace.</p>
                 </div>
@@ -187,16 +190,26 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
             <h2 className="font-display text-lg font-bold">Tarif</h2>
             <dl className="mt-2 space-y-1 text-sm">
               <div className="flex justify-between"><dt className="text-muted">Licence {r.category.name}</dt><dd>{formatEUR(r.category.priceCents)}</dd></div>
-              {extrasOf(r.extras).map((e) => <div key={e.id} className="flex justify-between"><dt className="text-muted">{e.label}</dt><dd>{formatEUR(e.amountCents)}</dd></div>)}
+              {extrasOf(r.extras).map((e) => (
+                <div key={e.id} className={e.pending ? "rounded-lg bg-amber-50 p-2" : ""}>
+                  <div className="flex justify-between"><dt className="text-muted">{e.label}{e.pending && <span className="ml-1 text-xs font-semibold text-amber-800">· en attente du justificatif</span>}</dt><dd className={e.pending ? "text-muted line-through" : ""}>{e.amountCents > 0 ? "+" : ""}{formatEUR(e.amountCents)}</dd></div>
+                  {e.pending && (
+                    <>
+                      <p className="mt-1 text-xs">{e.proof ? <>Justificatif indiqué par la famille : <b>{e.proof}</b></> : <span className="text-muted">La famille n'a pas encore donné son justificatif.</span>}</p>
+                      <ActionForm action={confirmReductionAction} className="mt-1"><input type="hidden" name="registrationId" value={r.id} /><input type="hidden" name="extraId" value={e.id} /><SubmitButton size="sm">✓ Justificatif reçu : appliquer la réduction</SubmitButton></ActionForm>
+                    </>
+                  )}
+                </div>
+              ))}
               <div className="flex justify-between border-t border-line pt-1 font-bold"><dt>Total pour le club</dt><dd>{formatEUR(r.licenseFeeCents)}</dd></div>
             </dl>
-            {canEditExtras && (
+            {canEditExtras && !sendsPayment && (
               <ActionForm action={setExtrasAction} className="mt-3 space-y-2">
                 <input type="hidden" name="registrationId" value={r.id} />
                 {fees.map((f) => (
                   <label key={f.id} className="flex items-center gap-2 text-sm">
                     <input type="checkbox" name="extras" value={f.id} defaultChecked={f.mandatory || chosen.has(f.id)} disabled={f.mandatory} className="accent-pitch-700" />
-                    {f.label} ({formatEUR(f.amountCents)}){f.mandatory && <span className="text-xs text-muted">· obligatoire</span>}
+                    {f.label} ({f.kind === "REDUCTION" ? "-" : "+"}{formatEUR(f.amountCents)}){f.mandatory && <span className="text-xs text-muted">· obligatoire</span>}
                   </label>
                 ))}
                 <SubmitButton size="sm" variant="outline">Mettre à jour le tarif</SubmitButton>

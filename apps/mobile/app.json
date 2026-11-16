@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
-    "splash": { "backgroundColor": "#0B3D2E" },
+    "splash": { "backgroundColor": "#0B1426" },
     "ios": {
       "bundleIdentifier": "fr.licengo.app",
       "supportsTablet": true,
@@ -20,7 +20,7 @@
     },
     "android": {
       "package": "fr.licengo.app",
-      "adaptiveIcon": { "backgroundColor": "#0B3D2E" },
+      "adaptiveIcon": { "backgroundColor": "#0B1426" },
       "permissions": ["CAMERA", "POST_NOTIFICATIONS"],
       "blockedPermissions": ["android.permission.RECORD_AUDIO", "android.permission.ACCESS_FINE_LOCATION"]
     },
@@ -28,7 +28,7 @@
       "expo-router",
       "expo-secure-store",
       ["expo-image-picker", { "cameraPermission": "LICENGO utilise l'appareil photo pour photographier les documents d'inscription." }],
-      ["expo-notifications", { "color": "#0B3D2E" }]
+      ["expo-notifications", { "color": "#0B1426" }]
     ],
     "experiments": { "typedRoutes": false },
     "extra": { "apiUrl": "https://app.licengo.fr", "eas": { "projectId": "REMPLACER-PAR-ID-EAS" } }

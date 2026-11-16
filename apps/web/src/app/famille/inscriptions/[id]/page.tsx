@@ -4,14 +4,14 @@ import { DOCUMENT_LABELS, SIGNATURE_LABELS, formatEUR, type SignableDocument } f
 import { prisma } from "@/server/db";
 import { familyUser } from "@/lib/guards";
 import { getRegistration, computeCompleteness, nextSeason, extrasOf } from "@/server/services/registrations";
-import { Alert, Card, PageHeader, Progress, formatDateTime, cx } from "@/components/ui";
+import { Alert, Card, Input, PageHeader, Progress, formatDateTime, cx } from "@/components/ui";
 import { DocumentUploader } from "@/components/document-uploader";
 import { DocumentRow } from "@/components/document-list";
 import { SignAll } from "@/components/sign-all";
 import { InstallmentPicker } from "@/components/installment-picker";
 import { InstallmentsTable } from "@/components/installments-table";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { renewAction, cancelRegistrationAction, declareFffAction } from "@/app/actions/family";
+import { renewAction, cancelRegistrationAction, declareFffAction, addReductionProofAction } from "@/app/actions/family";
 
 export const metadata = { title: "Dossier d'inscription" };
 
@@ -29,7 +29,7 @@ function Step({ n, title, done, active, locked, children }: { n: number; title: 
         <span className={cx("grid h-9 w-9 shrink-0 place-items-center rounded-full font-display text-base font-black", done ? "bg-pitch-700 text-white" : active ? "bg-volt-500 text-pitch-950" : "bg-chalk text-muted")}>
           {done ? "✓" : locked ? <Lock className="h-4 w-4" /> : n}
         </span>
-        <div><p className="text-[11px] font-bold uppercase tracking-wider text-muted">Étape {n} sur 3</p><h2 className="font-display text-lg font-bold leading-tight">{title}</h2></div>
+        <div><p className="text-[11px] font-bold uppercase tracking-wider text-muted">Étape {n} sur 2</p><h2 className="font-display text-lg font-bold leading-tight">{title}</h2></div>
         {done && <span className="ml-auto text-sm font-semibold text-pitch-700">Terminé</span>}
       </div>
       <div className="mt-4">{children}</div>
@@ -53,11 +53,16 @@ export default async function RegistrationPage({ params, searchParams }: { param
   // step states
   const fffMode = r.club.footclubsMode;
   const docsDone = fffMode ? !!r.fffDeclaredAt && r.fffStatus !== "MISSING" : c.missingUploads.length === 0 && !c.issues.some((i) => i.code.startsWith("DOC_"));
-  const payLocked = r.club.payAfterCheck && !(fffMode ? r.fffStatus === "OK" : r.status === "VALIDATED");
+  const payLocked = r.club.payAfterCheck && !(fffMode ? r.fffStatus === "OK" : !!r.paymentRequestedAt);
   const signDone = c.missingSignatures.length === 0 && r.signatures.some((s) => s.type === "IMAGE_RIGHTS");
   const payDone = !!payment;
-  const current = !docsDone ? 1 : !signDone ? 2 : !payDone ? 3 : 0;
-  const needsHealth = !fffMode && (c.requiredSignatures.includes("HEALTH_QUESTIONNAIRE") || r.healthAnswer === "SOME_YES" || !r.healthAnswer);
+  const dossierDone = docsDone && signDone;
+  const current = !dossierDone ? 1 : !payDone ? 2 : 0;
+  const extras = extrasOf(r.extras);
+  const pendingReductions = extras.filter((e) => e.pending);
+  // a club that chose its own documents (photo, certificate, charter) does not ask the health questionnaire
+  const customDocs = r.club.requiredUploads.length + r.club.requiredSignatures.length > 0;
+  const needsHealth = !fffMode && (c.requiredSignatures.includes("HEALTH_QUESTIONNAIRE") || (!customDocs && (r.healthAnswer === "SOME_YES" || !r.healthAnswer)));
   const signItems = c.requiredSignatures.filter((s) => s !== "IMAGE_RIGHTS").map((s) => ({ type: s, label: SIGNATURE_LABELS[s], text: SIGN_TEXT[s] }));
   if (needsHealth && !signItems.some((i) => i.type === "HEALTH_QUESTIONNAIRE") && r.healthAnswer !== "SOME_YES")
     signItems.push({ type: "HEALTH_QUESTIONNAIRE", label: SIGNATURE_LABELS.HEALTH_QUESTIONNAIRE, text: SIGN_TEXT.HEALTH_QUESTIONNAIRE });
@@ -102,75 +107,87 @@ export default async function RegistrationPage({ params, searchParams }: { param
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
           <div id="etape-1" className="scroll-mt-24" />
-          {fffMode ? (
-            <Step n={1} title="Le formulaire de licence FFF" done={docsDone} active={current === 1}>
-              <ol className="space-y-2 text-sm">
-                <li>1. Ouvrez l'email <b>« Demande de licence »</b> envoyé par la FFF (pensez aux spams).</li>
-                <li>2. Remplissez le formulaire et ajoutez les documents demandés (certificat médical, photo, pièce d'identité…).</li>
-                <li>3. Revenez ici et cliquez sur le bouton ci-dessous.</li>
-              </ol>
-              {r.fffStatus === "MISSING" && (
-                <div className="mt-3 rounded-xl border-2 border-danger bg-red-50 p-3 text-sm" data-testid="fff-missing">
-                  <p className="font-bold text-danger">Le club a vérifié votre formulaire FFF : il manque</p>
-                  <ul className="mt-1 list-inside list-disc">{r.fffMissing.map((m) => <li key={m}>{m}</li>)}</ul>
-                  <p className="mt-1 text-muted">Complétez-les sur le formulaire FFF, puis cliquez sur le bouton.</p>
-                </div>
-              )}
-              {r.fffStatus === "OK" ? <p className="mt-3 font-semibold text-pitch-700">✓ Vérifié par le club</p>
-                : r.fffDeclaredAt ? <p className="mt-3 text-sm text-muted">✓ Merci ! Le club va vérifier votre formulaire sur Footclubs.</p>
-                : !closed && (
-                  <form action={declareFffAction} className="mt-3"><input type="hidden" name="registrationId" value={r.id} />
-                    <button className="h-12 w-full rounded-xl bg-volt-500 text-sm font-bold text-pitch-950" data-testid="fff-declare">{r.fffStatus === "MISSING" ? "J'ai complété les documents manquants" : "J'ai rempli mon formulaire FFF"}</button>
-                  </form>
+          <Step n={1} title="Mon dossier" done={dossierDone} active={current === 1}>
+            {fffMode ? (
+              <div className="rounded-xl border border-line p-4">
+                <p className="font-semibold">Formulaire de licence FFF</p>
+                <ol className="mt-2 space-y-1 text-sm">
+                  <li>1. Ouvrez l'email <b>« Demande de licence »</b> envoyé par la FFF (pensez aux spams).</li>
+                  <li>2. Remplissez-le et ajoutez les documents demandés (certificat médical, photo…).</li>
+                  <li>3. Revenez ici et cliquez sur le bouton.</li>
+                </ol>
+                {r.fffStatus === "MISSING" && (
+                  <div className="mt-3 rounded-xl border-2 border-danger bg-red-50 p-3 text-sm" data-testid="fff-missing">
+                    <p className="font-bold text-danger">Le club a vérifié votre formulaire FFF : il manque</p>
+                    <ul className="mt-1 list-inside list-disc">{r.fffMissing.map((m) => <li key={m}>{m}</li>)}</ul>
+                    <p className="mt-1 text-muted">Complétez-les sur le formulaire FFF, puis cliquez sur le bouton.</p>
+                  </div>
                 )}
-            </Step>
-          ) : (
-          <Step n={1} title="Les documents" done={docsDone} active={current === 1}>
-              <p className="mb-4 text-sm text-muted">Prenez simplement une photo avec votre téléphone.</p>
+                {r.fffStatus === "OK" ? <p className="mt-3 font-semibold text-pitch-700">✓ Vérifié par le club</p>
+                  : r.fffDeclaredAt ? <p className="mt-3 text-sm text-muted">✓ Merci ! Le club va vérifier votre formulaire sur Footclubs.</p>
+                  : !closed && (
+                    <form action={declareFffAction} className="mt-3"><input type="hidden" name="registrationId" value={r.id} />
+                      <button className="h-12 w-full rounded-xl bg-volt-500 text-sm font-bold text-pitch-950" data-testid="fff-declare">{r.fffStatus === "MISSING" ? "J'ai complété les documents manquants" : "J'ai rempli mon formulaire FFF"}</button>
+                    </form>
+                  )}
+              </div>
+            ) : (
               <ul className="space-y-3">
                 {c.requiredUploads.map((t) => {
-                  const current = docs.find((d) => d.type === t);
-                  const ok = current && current.status !== "REJECTED" && !c.issues.some((i) => i.code.endsWith(t));
+                  const doc = docs.find((d) => d.type === t);
+                  const ok = doc && doc.status !== "REJECTED" && !c.issues.some((i) => i.code.endsWith(t));
                   return (
                     <li key={t} className="rounded-xl border border-line p-4">
                       <p className="flex items-center gap-2 font-semibold">{ok ? <CheckCircle2 className="h-5 w-5 text-pitch-600" /> : <Circle className="h-5 w-5 text-muted" />}{DOCUMENT_LABELS[t]}</p>
-                      {current?.status === "REJECTED" ? (
-                        <p className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-danger"><b>Refusé par le club :</b> {current.rejectReason}<br /><span className="text-ink">Envoyez un nouveau document ci-dessous, il remplacera l'ancien.</span></p>
-                      ) : current && <div className="mt-3"><DocumentRow doc={current} canDelete={editable} /></div>}
+                      {doc?.status === "REJECTED" ? (
+                        <p className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-danger"><b>Refusé par le club :</b> {doc.rejectReason}<br /><span className="text-ink">Envoyez un nouveau document ci-dessous, il remplacera l'ancien.</span></p>
+                      ) : doc && <div className="mt-3"><DocumentRow doc={doc} canDelete={editable} /></div>}
                       {!closed && !ok && <div className="mt-3"><DocumentUploader childId={r.childId} registrationId={r.id} type={t} withExpiry={t === "MEDICAL_CERTIFICATE"} /></div>}
                     </li>
                   );
                 })}
               </ul>
-            </Step>
-          )}
-
-          <Step n={2} title="Santé et signature" done={signDone} active={current === 2}>
-            {signDone ? (
-              <p className="text-sm text-muted">Signé par {r.signatures[0]?.signerName} le {r.signatures[0] && formatDateTime(r.signatures[0].signedAt)}. Droit à l'image : {r.imageRightsOk ? "accepté" : "refusé"}.</p>
-            ) : closed ? <p className="text-sm text-muted">Dossier clôturé.</p> : (
-              <SignAll registrationId={r.id} needsHealth={needsHealth} healthAnswer={r.healthAnswer} items={signItems} imageRightsText={SIGN_TEXT.IMAGE_RIGHTS} signerName={`${u.firstName} ${u.lastName}`} />
             )}
+            <div className="mt-4">
+              {signDone ? (
+                <p className="rounded-xl bg-chalk p-3 text-sm text-muted">✓ Charte signée par {r.signatures[0]?.signerName} le {r.signatures[0] && formatDateTime(r.signatures[0].signedAt)} · droit à l'image : {r.imageRightsOk ? "accepté" : "refusé"}.</p>
+              ) : !closed && (
+                <SignAll registrationId={r.id} needsHealth={needsHealth} healthAnswer={r.healthAnswer} items={signItems} imageRightsText={SIGN_TEXT.IMAGE_RIGHTS} signerName={`${u.firstName} ${u.lastName}`} />
+              )}
+            </div>
+            {dossierDone && ["SUBMITTED", "VALIDATED"].includes(r.status) && <p className="mt-3 font-semibold text-pitch-700">✓ Dossier envoyé au club</p>}
           </Step>
 
-          <Step n={3} title="Le paiement" done={payDone} active={current === 3} locked={!docsDone || !signDone}>
+          <Step n={2} title="Le paiement" done={payDone} active={current === 2} locked={!dossierDone}>
+            {(extras.length > 0 || pendingReductions.length > 0) && (
+              <dl className="mb-4 space-y-1 rounded-xl bg-chalk p-3 text-sm" data-testid="tarif">
+                <div className="flex justify-between"><dt className="text-muted">Licence {r.category.name}</dt><dd>{formatEUR(r.category.priceCents)}</dd></div>
+                {extras.map((e) => (
+                  <div key={e.id}>
+                    <div className="flex justify-between"><dt className="text-muted">{e.label}{e.pending && <span className="ml-1 text-xs text-pitch-700">· à réception du justificatif</span>}</dt><dd className={e.pending ? "text-muted" : ""}>{e.amountCents > 0 ? "+" : ""}{formatEUR(e.amountCents)}</dd></div>
+                    {e.pending && !closed && (
+                      e.proof ? <p className="text-xs text-muted">Justificatif envoyé ({e.proof}) : le club va appliquer la réduction.</p> : (
+                        <ActionForm action={addReductionProofAction} className="mt-1 flex gap-2">
+                          <input type="hidden" name="registrationId" value={r.id} /><input type="hidden" name="extraId" value={e.id} />
+                          <Input name="proof" placeholder="Code / n° du justificatif (dès réception)" className="h-9 text-sm" />
+                          <SubmitButton size="sm" variant="outline">Envoyer</SubmitButton>
+                        </ActionForm>
+                      )
+                    )}
+                  </div>
+                ))}
+                {pendingReductions.length > 0 && <p className="pt-1 text-xs text-muted">Les réductions avec justificatif sont déduites de vos échéances suivantes dès que le club a reçu le justificatif (vous pouvez payer dès maintenant).</p>}
+              </dl>
+            )}
             {payment ? (
               <><p className="mb-2 text-sm text-muted">Total {formatEUR(payment.totalCents)} en {payment.installmentsCount}×</p><InstallmentsTable installments={payment.installments} total={payment.installmentsCount} canRetry /></>
             ) : closed ? <p className="text-sm text-muted">Aucun paiement requis.</p> : payLocked && c.state === "COMPLETE" ? (
-              <div className="rounded-xl bg-chalk p-4 text-sm" data-testid="payment-wait-club"><p className="font-semibold">⏳ Le club vérifie votre dossier.</p><p className="mt-1 text-muted">Vous recevrez une notification dès que le paiement sera ouvert. Vous pourrez alors payer en 1 à 4 fois.</p></div>
+              <div className="rounded-xl bg-chalk p-4 text-sm" data-testid="payment-wait-club"><p className="font-semibold">⏳ Le club vérifie votre dossier.</p><p className="mt-1 text-muted">Dès qu'il l'aura validé, vous recevrez par email la demande de paiement avec le montant final (frais de mutation éventuels compris). Vous pourrez alors payer en 1 à 4 fois.</p></div>
             ) : c.state === "COMPLETE" ? (
-              <>
-                {extrasOf(r.extras).length > 0 && (
-                  <dl className="mb-4 space-y-1 rounded-xl bg-chalk p-3 text-sm">
-                    <div className="flex justify-between"><dt className="text-muted">Licence {r.category.name}</dt><dd>{formatEUR(r.category.priceCents)}</dd></div>
-                    {extrasOf(r.extras).map((e) => <div key={e.id} className="flex justify-between"><dt className="text-muted">{e.label}</dt><dd>{formatEUR(e.amountCents)}</dd></div>)}
-                  </dl>
-                )}
-                <InstallmentPicker registrationId={r.id} licenseCents={r.licenseFeeCents} feeCents={r.platformFeeCents} max={r.category.maxInstallments} />
-              </>
+              <InstallmentPicker registrationId={r.id} licenseCents={r.licenseFeeCents} feeCents={r.platformFeeCents} max={r.category.maxInstallments} />
             ) : (
               <div className="rounded-xl bg-chalk p-4 text-sm" data-testid="payment-locked">
-                <p className="font-semibold">🔒 Le paiement s'ouvrira dès que les étapes 1 et 2 seront terminées.</p>
+                <p className="font-semibold">🔒 Complétez d'abord votre dossier ci-dessus.</p>
                 <ul className="mt-2 list-inside list-disc text-muted">{c.summary.map((m) => <li key={m}>{m}</li>)}</ul>
               </div>
             )}

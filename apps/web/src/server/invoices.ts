@@ -94,8 +94,8 @@ export async function renderInvoicePdf(invoiceId: string): Promise<{ invoice: In
   const page = doc.addPage([595.28, 841.89]);
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const ink = rgb(0.055, 0.082, 0.07), muted = rgb(0.36, 0.42, 0.39), green = rgb(0.043, 0.239, 0.18), lime = rgb(0.776, 0.957, 0.196), white = rgb(1, 1, 1);
-  const light = rgb(0.965, 0.961, 0.945), line = rgb(0.89, 0.9, 0.88);
+  const ink = rgb(0.043, 0.071, 0.125), muted = rgb(0.353, 0.392, 0.471), green = rgb(0.043, 0.078, 0.149), lime = rgb(0.208, 0.812, 0.357), white = rgb(1, 1, 1);
+  const light = rgb(0.961, 0.969, 0.984), line = rgb(0.886, 0.906, 0.941);
   type O = { size?: number; f?: PDFFont; color?: ReturnType<typeof rgb> };
   const text = (s: string, x: number, y: number, o: O = {}) => page.drawText(safe(s), { x, y, size: o.size ?? 10, font: o.f ?? font, color: o.color ?? ink });
   const right = (s: string, xr: number, y: number, o: O = {}) => text(s, xr - (o.f ?? font).widthOfTextAtSize(safe(s), o.size ?? 10), y, o);
@@ -169,7 +169,7 @@ export async function renderInvoicePdf(invoiceId: string): Promise<{ invoice: In
     const st = i.status === "PAID" ? `Payée le ${day(i.paidAt ?? i.dueDate)}` : i.status === "FAILED" ? "Impayée - à régulariser" : i.status === "CANCELLED" ? "Annulée" : i.status === "REFUNDED" ? "Remboursée" : "À venir (prélèvement automatique)";
     text(`${i.index}/${p.installmentsCount}`, 48, y, { size: 9.5 });
     text(day(i.dueDate), 90, y, { size: 9.5 });
-    text(st, 260, y, { size: 9.5, color: i.status === "PAID" ? green : i.status === "FAILED" ? rgb(0.76, 0.21, 0.17) : muted, f: i.status === "PAID" ? bold : font });
+    text(st, 260, y, { size: 9.5, color: i.status === "PAID" ? rgb(0.118, 0.62, 0.275) : i.status === "FAILED" ? rgb(0.76, 0.21, 0.17) : muted, f: i.status === "PAID" ? bold : font });
     right(eur(i.amountCents), 547, y, { size: 9.5 });
     y -= 16;
   }

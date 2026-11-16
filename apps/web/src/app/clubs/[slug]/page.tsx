@@ -17,10 +17,12 @@ export default async function ClubPage({ params, searchParams }: { params: Promi
   const user = await getCurrentUser();
   const children = user?.familyId ? await prisma.child.findMany({ where: { familyId: user.familyId, deletedAt: null }, orderBy: { birthDate: "asc" } }) : [];
   const fee = club.plan?.licenseFeeCents ?? 499;
-  const extras = await prisma.clubFee.findMany({ where: { clubId: club.id, active: true }, orderBy: { createdAt: "asc" } });
+  // when the club checks the file before asking for payment, it adds the optional fees itself (transfer fee…)
+  const extras = (await prisma.clubFee.findMany({ where: { clubId: club.id, active: true }, orderBy: [{ kind: "desc" }, { createdAt: "asc" }] }))
+    .filter((f) => !club.payAfterCheck || f.kind === "REDUCTION" || f.mandatory);
   return (
     <main className="min-h-dvh pb-16">
-      <div className="text-white" style={{ background: `linear-gradient(135deg, ${club.primaryColor}, #04130D)` }}>
+      <div className="text-white" style={{ background: `linear-gradient(135deg, ${club.primaryColor}, #060B17)` }}>
         <PublicHeader dark />
         <div className="mx-auto max-w-6xl px-4 pb-10 pt-6 sm:px-6">
           <Badge tone="volt">{club.sport.emoji} {club.sport.name} · {club.sport.federation}</Badge>
@@ -58,7 +60,7 @@ export default async function ClubPage({ params, searchParams }: { params: Promi
             ) : (
               <RegisterForm
                 feeCents={fee}
-                extras={extras.map((e) => ({ id: e.id, label: e.label, description: e.description, amountCents: e.amountCents, mandatory: e.mandatory }))}
+                extras={extras.map((e) => ({ id: e.id, label: e.label, description: e.description, amountCents: e.amountCents, mandatory: e.mandatory, kind: e.kind, proofLabel: e.proofLabel }))}
                 defaultChild={enfant}
                 members={children.map((c) => ({ id: c.id, name: `${c.firstName} ${c.lastName}`, year: c.birthDate.getUTCFullYear(), gender: c.gender }))}
                 categories={club.categories.map((c) => ({ id: c.id, name: c.name, min: c.birthYearMin, max: c.birthYearMax, gender: c.gender, price: c.priceCents }))}

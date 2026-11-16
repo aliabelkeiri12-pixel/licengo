@@ -6,7 +6,7 @@ export function AuthShell({ title, subtitle, children, footer }: { title: string
   return (
     <main className="grid min-h-dvh md:grid-cols-[1fr_1.1fr]">
       <aside className="relative hidden bg-pitch-900 pitch-lines p-10 text-white md:flex md:flex-col md:justify-between">
-        <Link href="/"><Logo light /></Link>
+        <Link href="/"><Logo light tagline /></Link>
         <div>
           <p className="font-display text-4xl font-black leading-tight">Moins de papier.<br /><span className="text-volt-500">Plus de terrain.</span></p>
           <p className="mt-4 max-w-sm text-white/70">Inscriptions, documents, paiements et boutique de votre club, au même endroit.</p>

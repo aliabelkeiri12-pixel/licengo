@@ -25,7 +25,7 @@ export async function startLicensePayment(user: SessionUser, registrationId: str
   if (completeness.state !== "COMPLETE")
     throw new AppError(`Complétez d'abord le dossier avant de payer : ${completeness.summary.join(" · ")}`);
   if (r.club.payAfterCheck) {
-    const checked = r.club.footclubsMode ? r.fffStatus === "OK" : r.status === "VALIDATED";
+    const checked = r.club.footclubsMode ? r.fffStatus === "OK" : !!r.paymentRequestedAt;
     if (!checked) throw new AppError("Le club vérifie d'abord votre dossier : le paiement s'ouvrira dès sa vérification");
   }
   if (installmentsCount > 1 && !opts.acceptBalanceClause)
@@ -71,6 +71,8 @@ export async function retryInstallmentCheckout(user: SessionUser, installmentId:
   });
   return { url: s.url };
 }
+
+export const refreshPaymentStatus = (paymentId: string) => refreshAggregates(paymentId);
 
 async function refreshAggregates(paymentId: string) {
   const p = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId }, include: { installments: true, order: true } });

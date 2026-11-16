@@ -17,7 +17,7 @@ export default async function Children() {
         <Card className="divide-y divide-line">
           {children.map((c) => (
             <Link key={c.id} href={`/famille/enfants/${c.id}`} className="flex items-center gap-4 p-4 hover:bg-chalk">
-              <span className="grid h-11 w-11 place-items-center rounded-full bg-pitch-800 font-display font-bold text-volt-400">{c.firstName[0]}</span>
+              <span className="grid h-11 w-11 place-items-center rounded-full bg-pitch-900 font-display font-bold text-volt-400">{c.firstName[0]}</span>
               <div className="min-w-0 flex-1"><p className="font-semibold">{c.firstName} {c.lastName}</p><p className="text-xs text-muted">{ageAt(c.birthDate)} ans · {c._count.documents} document(s){c.registrations[0] ? ` · ${c.registrations[0].club.name}` : ""}</p></div>
               {c.registrations[0] && <RegistrationBadge status={c.registrations[0].status} />}
               <ChevronRight className="h-4 w-4 text-muted" />
