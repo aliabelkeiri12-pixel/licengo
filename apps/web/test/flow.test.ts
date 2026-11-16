@@ -343,3 +343,64 @@ describe("réinscription après annulation", () => {
     expect(again.status).toBe("DRAFT");
   });
 });
+
+describe("mode Footclubs (scénario du secrétaire)", () => {
+  it("formulaire FFF déclaré, vérifié, documents manquants envoyés, paiement après vérification, saisie Footclubs, paiement sur place, récap", async () => {
+    const { createRegistration, signDocument, decide, getRegistration, computeCompleteness } = await import("@/server/services/registrations");
+    const fc = await import("@/server/services/footclubs");
+    const { startLicensePayment } = await import("@/server/services/payments");
+    await prisma.club.update({ where: { id: clubId }, data: { footclubsMode: true, payAfterCheck: true } });
+    const fam = await prisma.family.findFirstOrThrow({ where: { guardians: { some: { id: family.id } } } });
+    const start = Number((await prisma.category.findUniqueOrThrow({ where: { id: u11Id } })).season.slice(0, 4));
+    const kid = await prisma.child.create({ data: { familyId: fam.id, firstName: "Idrissa", lastName: "Test", birthDate: new Date(Date.UTC(start - 10, 3, 3)), gender: "M" } });
+    const reg = await createRegistration(family as never, kid.id, u11Id);
+
+    // no ID / photo / medical upload asked by LICENGO: only the club rules + the FFF form
+    let c = await computeCompleteness(await getRegistration(reg.id));
+    expect(c.requiredUploads).toEqual([]);
+    expect(c.summary.join(" ")).toContain("formulaire de licence FFF");
+    await signDocument(family as never, reg.id, "CLUB_RULES", { signerName: "Paul Test", accepted: true });
+    await signDocument(family as never, reg.id, "IMAGE_RIGHTS", { signerName: "Paul Test", accepted: false });
+    expect((await getRegistration(reg.id)).status).not.toBe("SUBMITTED");
+
+    // the player says he filled the FFF form → file goes to the club, but payment waits for the check
+    await fc.declareFffForm(family as never, reg.id);
+    expect((await getRegistration(reg.id)).status).toBe("SUBMITTED");
+    await expect(startLicensePayment(family as never, reg.id, 1)).rejects.toThrow("vérifie");
+    await expect(decide(staff as never, reg.id, "VALIDATE")).rejects.toThrow("formulaire FFF");
+
+    // the secretary sees the medical certificate is missing in Footclubs
+    await fc.checkFffForm(staff as never, reg.id, false, ["Certificat médical"]);
+    let r = await getRegistration(reg.id);
+    expect(r.status).toBe("TO_FIX");
+    expect(r.fffMissing).toEqual(["Certificat médical"]);
+    const mails = (globalThis as { __sentMails?: { subject: string; text: string }[] }).__sentMails ?? [];
+    expect(mails.some((m) => m.subject.includes("documents manquants") && m.text.includes("Certificat médical"))).toBe(true);
+
+    // the player completes it, says so; the secretary checks again → payment opens
+    await fc.declareFffForm(family as never, reg.id);
+    expect((await getRegistration(reg.id)).status).toBe("SUBMITTED");
+    await fc.checkFffForm(staff as never, reg.id, true, []);
+    const pay = await startLicensePayment(family as never, reg.id, 1);
+    expect(pay.url).toContain("/paiement/simulation/");
+    await decide(staff as never, reg.id, "VALIDATE");
+    await fc.markFootclubsDone(staff as never, reg.id, true);
+    r = await getRegistration(reg.id);
+    expect(r.status).toBe("VALIDATED");
+    expect(r.footclubsDoneAt).not.toBeNull();
+
+    // another player pays cash at the licence desk
+    const kid2 = await prisma.child.create({ data: { familyId: fam.id, firstName: "Karim", lastName: "Test", birthDate: new Date(Date.UTC(start - 10, 4, 4)), gender: "M" } });
+    const reg2 = await createRegistration(family as never, kid2.id, u11Id);
+    await fc.recordOfflinePayment(staff as never, reg2.id, "ESPECES", "permanence du samedi");
+    const r2 = await getRegistration(reg2.id);
+    expect(r2.paymentStatus).toBe("PAID");
+    const inv = await prisma.invoice.findFirstOrThrow({ where: { payment: { registrationId: reg2.id } } });
+    expect(inv.amountCents).toBe(15000); // no LICENGO fee on cash paid at the club
+    await expect(fc.recordOfflinePayment(staff as never, reg2.id, "CHEQUE")).rejects.toThrow("existe déjà");
+
+    // daily summary for the secretary
+    expect((await fc.runDailyDigest()).sent).toBeGreaterThan(0);
+    await prisma.club.update({ where: { id: clubId }, data: { footclubsMode: false, payAfterCheck: false } });
+  });
+});

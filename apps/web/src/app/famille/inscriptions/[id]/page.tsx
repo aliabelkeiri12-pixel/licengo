@@ -11,7 +11,7 @@ import { SignAll } from "@/components/sign-all";
 import { InstallmentPicker } from "@/components/installment-picker";
 import { InstallmentsTable } from "@/components/installments-table";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { renewAction, cancelRegistrationAction } from "@/app/actions/family";
+import { renewAction, cancelRegistrationAction, declareFffAction } from "@/app/actions/family";
 
 export const metadata = { title: "Dossier d'inscription" };
 
@@ -51,11 +51,13 @@ export default async function RegistrationPage({ params, searchParams }: { param
   const hasNext = r.status === "VALIDATED" && (await prisma.category.count({ where: { clubId: r.clubId, season: nextSeason(r.season), open: true } })) > 0;
 
   // step states
-  const docsDone = c.missingUploads.length === 0 && !c.issues.some((i) => i.code.startsWith("DOC_"));
+  const fffMode = r.club.footclubsMode;
+  const docsDone = fffMode ? !!r.fffDeclaredAt && r.fffStatus !== "MISSING" : c.missingUploads.length === 0 && !c.issues.some((i) => i.code.startsWith("DOC_"));
+  const payLocked = r.club.payAfterCheck && !(fffMode ? r.fffStatus === "OK" : r.status === "VALIDATED");
   const signDone = c.missingSignatures.length === 0 && r.signatures.some((s) => s.type === "IMAGE_RIGHTS");
   const payDone = !!payment;
   const current = !docsDone ? 1 : !signDone ? 2 : !payDone ? 3 : 0;
-  const needsHealth = c.requiredSignatures.includes("HEALTH_QUESTIONNAIRE") || r.healthAnswer === "SOME_YES" || !r.healthAnswer;
+  const needsHealth = !fffMode && (c.requiredSignatures.includes("HEALTH_QUESTIONNAIRE") || r.healthAnswer === "SOME_YES" || !r.healthAnswer);
   const signItems = c.requiredSignatures.filter((s) => s !== "IMAGE_RIGHTS").map((s) => ({ type: s, label: SIGNATURE_LABELS[s], text: SIGN_TEXT[s] }));
   if (needsHealth && !signItems.some((i) => i.type === "HEALTH_QUESTIONNAIRE") && r.healthAnswer !== "SOME_YES")
     signItems.push({ type: "HEALTH_QUESTIONNAIRE", label: SIGNATURE_LABELS.HEALTH_QUESTIONNAIRE, text: SIGN_TEXT.HEALTH_QUESTIONNAIRE });
@@ -100,24 +102,48 @@ export default async function RegistrationPage({ params, searchParams }: { param
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
           <div id="etape-1" className="scroll-mt-24" />
+          {fffMode ? (
+            <Step n={1} title="Le formulaire de licence FFF" done={docsDone} active={current === 1}>
+              <ol className="space-y-2 text-sm">
+                <li>1. Ouvrez l'email <b>« Demande de licence »</b> envoyé par la FFF (pensez aux spams).</li>
+                <li>2. Remplissez le formulaire et ajoutez les documents demandés (certificat médical, photo, pièce d'identité…).</li>
+                <li>3. Revenez ici et cliquez sur le bouton ci-dessous.</li>
+              </ol>
+              {r.fffStatus === "MISSING" && (
+                <div className="mt-3 rounded-xl border-2 border-danger bg-red-50 p-3 text-sm" data-testid="fff-missing">
+                  <p className="font-bold text-danger">Le club a vérifié votre formulaire FFF : il manque</p>
+                  <ul className="mt-1 list-inside list-disc">{r.fffMissing.map((m) => <li key={m}>{m}</li>)}</ul>
+                  <p className="mt-1 text-muted">Complétez-les sur le formulaire FFF, puis cliquez sur le bouton.</p>
+                </div>
+              )}
+              {r.fffStatus === "OK" ? <p className="mt-3 font-semibold text-pitch-700">✓ Vérifié par le club</p>
+                : r.fffDeclaredAt ? <p className="mt-3 text-sm text-muted">✓ Merci ! Le club va vérifier votre formulaire sur Footclubs.</p>
+                : !closed && (
+                  <form action={declareFffAction} className="mt-3"><input type="hidden" name="registrationId" value={r.id} />
+                    <button className="h-12 w-full rounded-xl bg-volt-500 text-sm font-bold text-pitch-950" data-testid="fff-declare">{r.fffStatus === "MISSING" ? "J'ai complété les documents manquants" : "J'ai rempli mon formulaire FFF"}</button>
+                  </form>
+                )}
+            </Step>
+          ) : (
           <Step n={1} title="Les documents" done={docsDone} active={current === 1}>
-            <p className="mb-4 text-sm text-muted">Prenez simplement une photo avec votre téléphone.</p>
-            <ul className="space-y-3">
-              {c.requiredUploads.map((t) => {
-                const current = docs.find((d) => d.type === t);
-                const ok = current && current.status !== "REJECTED" && !c.issues.some((i) => i.code.endsWith(t));
-                return (
-                  <li key={t} className="rounded-xl border border-line p-4">
-                    <p className="flex items-center gap-2 font-semibold">{ok ? <CheckCircle2 className="h-5 w-5 text-pitch-600" /> : <Circle className="h-5 w-5 text-muted" />}{DOCUMENT_LABELS[t]}</p>
-                    {current?.status === "REJECTED" ? (
-                      <p className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-danger"><b>Refusé par le club :</b> {current.rejectReason}<br /><span className="text-ink">Envoyez un nouveau document ci-dessous, il remplacera l'ancien.</span></p>
-                    ) : current && <div className="mt-3"><DocumentRow doc={current} canDelete={editable} /></div>}
-                    {!closed && !ok && <div className="mt-3"><DocumentUploader childId={r.childId} registrationId={r.id} type={t} withExpiry={t === "MEDICAL_CERTIFICATE"} /></div>}
-                  </li>
-                );
-              })}
-            </ul>
-          </Step>
+              <p className="mb-4 text-sm text-muted">Prenez simplement une photo avec votre téléphone.</p>
+              <ul className="space-y-3">
+                {c.requiredUploads.map((t) => {
+                  const current = docs.find((d) => d.type === t);
+                  const ok = current && current.status !== "REJECTED" && !c.issues.some((i) => i.code.endsWith(t));
+                  return (
+                    <li key={t} className="rounded-xl border border-line p-4">
+                      <p className="flex items-center gap-2 font-semibold">{ok ? <CheckCircle2 className="h-5 w-5 text-pitch-600" /> : <Circle className="h-5 w-5 text-muted" />}{DOCUMENT_LABELS[t]}</p>
+                      {current?.status === "REJECTED" ? (
+                        <p className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-danger"><b>Refusé par le club :</b> {current.rejectReason}<br /><span className="text-ink">Envoyez un nouveau document ci-dessous, il remplacera l'ancien.</span></p>
+                      ) : current && <div className="mt-3"><DocumentRow doc={current} canDelete={editable} /></div>}
+                      {!closed && !ok && <div className="mt-3"><DocumentUploader childId={r.childId} registrationId={r.id} type={t} withExpiry={t === "MEDICAL_CERTIFICATE"} /></div>}
+                    </li>
+                  );
+                })}
+              </ul>
+            </Step>
+          )}
 
           <Step n={2} title="Santé et signature" done={signDone} active={current === 2}>
             {signDone ? (
@@ -130,7 +156,9 @@ export default async function RegistrationPage({ params, searchParams }: { param
           <Step n={3} title="Le paiement" done={payDone} active={current === 3} locked={!docsDone || !signDone}>
             {payment ? (
               <><p className="mb-2 text-sm text-muted">Total {formatEUR(payment.totalCents)} en {payment.installmentsCount}×</p><InstallmentsTable installments={payment.installments} total={payment.installmentsCount} canRetry /></>
-            ) : closed ? <p className="text-sm text-muted">Aucun paiement requis.</p> : c.state === "COMPLETE" ? (
+            ) : closed ? <p className="text-sm text-muted">Aucun paiement requis.</p> : payLocked && c.state === "COMPLETE" ? (
+              <div className="rounded-xl bg-chalk p-4 text-sm" data-testid="payment-wait-club"><p className="font-semibold">⏳ Le club vérifie votre dossier.</p><p className="mt-1 text-muted">Vous recevrez une notification dès que le paiement sera ouvert. Vous pourrez alors payer en 1 à 4 fois.</p></div>
+            ) : c.state === "COMPLETE" ? (
               <>
                 {extrasOf(r.extras).length > 0 && (
                   <dl className="mb-4 space-y-1 rounded-xl bg-chalk p-3 text-sm">

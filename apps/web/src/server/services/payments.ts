@@ -24,6 +24,10 @@ export async function startLicensePayment(user: SessionUser, registrationId: str
   const completeness = await computeCompleteness(r);
   if (completeness.state !== "COMPLETE")
     throw new AppError(`Complétez d'abord le dossier avant de payer : ${completeness.summary.join(" · ")}`);
+  if (r.club.payAfterCheck) {
+    const checked = r.club.footclubsMode ? r.fffStatus === "OK" : r.status === "VALIDATED";
+    if (!checked) throw new AppError("Le club vérifie d'abord votre dossier : le paiement s'ouvrira dès sa vérification");
+  }
   if (installmentsCount > 1 && !opts.acceptBalanceClause)
     throw new AppError("Pour payer en plusieurs fois, vous devez accepter la clause de prélèvement du solde en cas d'impayé");
   if (r.paymentStatus === "PAID" || r.paymentStatus === "PARTIAL") throw new AppError("Cette licence est déjà réglée ou en cours de paiement");

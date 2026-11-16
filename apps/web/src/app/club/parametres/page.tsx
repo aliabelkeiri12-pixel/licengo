@@ -38,8 +38,22 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             <Field label="Couleur principale" name="primaryColor"><Input name="primaryColor" type="color" defaultValue={club.primaryColor} className="p-1" /></Field>
             <Field label="Relance automatique tous les" name="reminderEveryDays" hint="jours, pour les dossiers incomplets"><Input name="reminderEveryDays" type="number" min={1} max={30} defaultValue={club.reminderEveryDays} /></Field>
           </div>
+          <div className="space-y-3 rounded-xl bg-chalk p-4">
+            <p className="text-sm font-bold">Fonctionnement des licences</p>
+            <label className="flex items-start gap-3 text-sm"><input type="checkbox" name="footclubsMode" defaultChecked={club.footclubsMode} className="mt-0.5 h-4 w-4 accent-pitch-700" />
+              <span><b>Mode Footclubs</b> : les documents de licence (certificat, photo, identité…) sont remplis par le joueur sur le <b>formulaire FFF</b> reçu par email. LICENGO ne les redemande pas : il gère le paiement, la charte du club et la vérification.</span></label>
+            <label className="flex items-start gap-3 text-sm"><input type="checkbox" name="payAfterCheck" defaultChecked={club.payAfterCheck} className="mt-0.5 h-4 w-4 accent-pitch-700" />
+              <span><b>Paiement après ma vérification</b> : le joueur ne peut payer qu'une fois son dossier vérifié par le club.</span></label>
+            <label className="flex items-start gap-3 text-sm"><input type="checkbox" name="dailyDigest" defaultChecked={club.dailyDigest} className="mt-0.5 h-4 w-4 accent-pitch-700" />
+              <span><b>Récapitulatif par email chaque jour</b> : dossiers à vérifier, à valider, à saisir dans Footclubs, paiements reçus. Pas besoin de surveiller les notifications.</span></label>
+          </div>
           <SubmitButton>Enregistrer</SubmitButton>
         </ActionForm>
+      </Card>
+      <Card className="p-5">
+        <h2 className="font-display text-lg font-bold">Affiche pour les permanences</h2>
+        <p className="mt-1 text-sm text-muted">Une affiche avec un QR code : les familles le scannent avec leur téléphone pour s'inscrire et payer en ligne.</p>
+        <a href="/club/affiche" target="_blank" className="mt-3 inline-flex rounded-xl bg-volt-500 px-4 py-2 text-sm font-semibold text-pitch-950">🖨️ Ouvrir l'affiche à imprimer</a>
       </Card>
       <Card className="p-5">
         <h2 className="font-display text-lg font-bold">Équipe & droits d'accès</h2>

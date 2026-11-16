@@ -264,3 +264,10 @@ export async function signAllAction(_: ActionState, fd: FormData): Promise<Actio
     return { ok: "Signature enregistrée ✔" };
   });
 }
+
+export async function declareFffAction(fd: FormData) {
+  const u = await family();
+  const { declareFffForm } = await import("@/server/services/footclubs");
+  await declareFffForm(u, str(fd, "registrationId"));
+  revalidatePath(`/famille/inscriptions/${str(fd, "registrationId")}`);
+}

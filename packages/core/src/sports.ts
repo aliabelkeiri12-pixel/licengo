@@ -9,6 +9,8 @@ export interface SportRules {
   minorsQuestionnaireInsteadOfCertificate: boolean;
   /** Validity of an adult medical certificate, in years. */
   certificateValidityYears: number;
+  /** Footclubs mode: the federation collects ID / medical / parental papers in its own form. */
+  federationCollectsDocs?: boolean;
   /** Month (1-12) when the season starts. */
   seasonStartMonth: number;
 }

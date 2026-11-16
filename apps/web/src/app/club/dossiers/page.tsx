@@ -9,7 +9,9 @@ import { remindAction } from "@/app/actions/club";
 
 export const metadata = { title: "Dossiers" };
 
-const TABS: { key: string; label: string; statuses?: RegistrationStatus[] }[] = [
+const TABS: { key: string; label: string; statuses?: RegistrationStatus[]; footclubs?: boolean }[] = [
+  { key: "FFF", label: "FFF à vérifier", footclubs: true },
+  { key: "FOOTCLUBS", label: "À saisir Footclubs" },
   { key: "SUBMITTED", label: "À valider", statuses: ["SUBMITTED"] },
   { key: "INCOMPLETE", label: "Incomplets", statuses: ["DRAFT", "INCOMPLETE"] },
   { key: "TO_FIX", label: "À corriger", statuses: ["TO_FIX"] },
@@ -21,9 +23,15 @@ export default async function Files({ searchParams }: { searchParams: Promise<Re
   const { clubId } = await clubContext();
   const sp = await searchParams;
   const season = sp.saison ?? currentSeason();
-  const tab = TABS.find((t) => t.key === sp.statut) ?? TABS[0];
+  const club = await prisma.club.findUniqueOrThrow({ where: { id: clubId } });
+  const tabs = TABS.filter((t) => !t.footclubs || club.footclubsMode);
+  const tab = tabs.find((t) => t.key === sp.statut) ?? tabs.find((t) => t.key === "SUBMITTED")!;
+  const special: Record<string, Prisma.RegistrationWhereInput> = {
+    FFF: { fffDeclaredAt: { not: null }, fffStatus: null, status: { notIn: ["REJECTED", "CANCELLED"] } },
+    FOOTCLUBS: { status: "VALIDATED", footclubsDoneAt: null },
+  };
   const base: Prisma.RegistrationWhereInput = { clubId, season, status: { notIn: ["CANCELLED"] } };
-  const where: Prisma.RegistrationWhereInput = { ...base, ...(tab.statuses ? { status: { in: tab.statuses } } : {}), ...(sp.categorie ? { categoryId: sp.categorie } : {}), ...(sp.paiement ? { paymentStatus: sp.paiement as never } : {}) };
+  const where: Prisma.RegistrationWhereInput = { ...base, ...(special[tab.key] ?? {}), ...(tab.statuses ? { status: { in: tab.statuses } } : {}), ...(sp.categorie ? { categoryId: sp.categorie } : {}), ...(sp.paiement ? { paymentStatus: sp.paiement as never } : {}) };
   if (sp.q) where.child = { OR: [{ firstName: { contains: sp.q, mode: "insensitive" } }, { lastName: { contains: sp.q, mode: "insensitive" } }] };
   const [regs, counts, categories, seasons] = await Promise.all([
     prisma.registration.findMany({ where, include: { child: { include: { family: { include: { guardians: { take: 1 } } } } }, category: true }, orderBy: [{ updatedAt: "desc" }], take: 300 }),
@@ -31,14 +39,15 @@ export default async function Files({ searchParams }: { searchParams: Promise<Re
     prisma.category.findMany({ where: { clubId, season }, orderBy: { birthYearMax: "desc" } }),
     prisma.registration.findMany({ where: { clubId }, distinct: ["season"], select: { season: true } }),
   ]);
-  const count = (t: (typeof TABS)[number]) => counts.filter((c) => !t.statuses || t.statuses.includes(c.status)).reduce((s, c) => s + c._count, 0);
+  const specialCounts = Object.fromEntries(await Promise.all(Object.entries(special).map(async ([k, w]) => [k, await prisma.registration.count({ where: { ...base, ...w } })] as const)));
+  const count = (t: (typeof TABS)[number]) => (t.key in special ? specialCounts[t.key] : counts.filter((c) => !t.statuses || t.statuses.includes(c.status)).reduce((s, c) => s + c._count, 0));
   const qs = (k: string) => { const q = new URLSearchParams(Object.entries(sp).filter(([, v]) => v) as [string, string][]); q.set("statut", k); return `?${q}`; };
   return (
     <>
       <PageHeader title="Dossiers d'inscription" subtitle={`Saison ${season} · détection automatique des pièces manquantes et incohérences`} />
       {sp.relance && <div className="mb-4"><Alert tone="success">{sp.relance} relance(s) envoyée(s).</Alert></div>}
       <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-white p-1 ring-1 ring-line">
-        {TABS.map((t) => <Link key={t.key} href={qs(t.key)} className={cx("shrink-0 rounded-lg px-3 py-2 text-sm font-semibold", t.key === tab.key ? "bg-pitch-800 text-white" : "text-muted hover:text-ink")}>{t.label} <span className="ml-1 opacity-70">{count(t)}</span></Link>)}
+        {tabs.map((t) => <Link key={t.key} href={qs(t.key)} className={cx("shrink-0 rounded-lg px-3 py-2 text-sm font-semibold", t.key === tab.key ? "bg-pitch-800 text-white" : "text-muted hover:text-ink")}>{t.label} <span className="ml-1 opacity-70">{count(t)}</span></Link>)}
       </div>
       <form className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_180px_160px_140px_auto]">
         <input type="hidden" name="statut" value={tab.key} />

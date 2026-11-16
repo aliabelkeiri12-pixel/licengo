@@ -184,7 +184,7 @@ export async function renderInvoicePdf(invoiceId: string): Promise<{ invoice: In
   const mentions = [
     "* TVA non applicable sur la cotisation et les articles du club - article 261, 7-1° du CGI (association sportive à but non lucratif).",
     `Facture émise par ${plat.name} en son nom pour les frais de service, et au nom et pour le compte du club pour la cotisation (mandat de facturation).`,
-    "Paiement par carte bancaire via LICENGO. Pas d'escompte pour paiement anticipé.",
+    p.provider.startsWith("offline:") ? `Réglé directement au club (${({ "offline:ESPECES": "espèces", "offline:CHEQUE": "chèque" } as Record<string, string>)[p.provider] ?? "autre moyen"}). Aucun frais de service.` : "Paiement par carte bancaire via LICENGO. Pas d'escompte pour paiement anticipé.",
   ];
   mentions.forEach((m, i) => text(m, 40, 74 - i * 11, { size: 7, color: muted }));
   if (p.provider === "mock") {

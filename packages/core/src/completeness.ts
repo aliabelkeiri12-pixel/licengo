@@ -31,6 +31,7 @@ export interface CompletenessResult {
 export function requirementsFor(rules: SportRules, isMinor: boolean, healthAnswer: HealthAnswer) {
   const uploads = new Set<DocumentType>(rules.uploads);
   const signatures = new Set<SignableDocument>(rules.signatures);
+  if (rules.federationCollectsDocs) return { uploads: [...uploads], signatures: [...signatures] };
   if (isMinor) {
     signatures.add("PARENTAL_AUTHORIZATION");
     if (rules.minorsQuestionnaireInsteadOfCertificate && healthAnswer !== "SOME_YES") signatures.add("HEALTH_QUESTIONNAIRE");

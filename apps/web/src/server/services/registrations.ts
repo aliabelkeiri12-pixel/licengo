@@ -44,18 +44,38 @@ export async function assertClubAccess(user: SessionUser, registrationId: string
   return r;
 }
 
+export const FFF_FORM_TODO = "À faire : remplir votre formulaire de licence FFF (lien reçu par email de la FFF)";
+
 export async function computeCompleteness(r: FullRegistration) {
   const docs = await registrationDocuments(r.childId);
   const guardian = r.child.family.guardians[0];
-  return evaluateCompleteness({
+  const baseRules = r.club.sport.rules as unknown as SportRules;
+  // Footclubs mode: the FFF collects ID, photo, medical and parental papers in its own form
+  const rules: SportRules = r.club.footclubsMode ? { ...baseRules, uploads: [], signatures: ["CLUB_RULES"], federationCollectsDocs: true } : baseRules;
+  const res = evaluateCompleteness({
     child: { firstName: r.child.firstName, lastName: r.child.lastName, birthDate: r.child.birthDate, gender: r.child.gender === "MIXED" ? null : r.child.gender },
     category: { name: r.category.name, birthYearMin: r.category.birthYearMin, birthYearMax: r.category.birthYearMax, gender: r.category.gender },
-    rules: r.club.sport.rules as unknown as SportRules,
+    rules,
     documents: docs.map((d) => ({ type: d.type as DocumentType, status: d.status, expiresAt: d.expiresAt, rejectReason: d.rejectReason })),
     signatures: r.signatures.filter((s) => s.accepted).map((s) => s.type as SignableDocument),
     healthAnswer: (r.healthAnswer as "ALL_NO" | "SOME_YES" | null) ?? null,
     guardian: guardian ? { phone: guardian.phone, email: guardian.email } : undefined,
   });
+  if (!r.club.footclubsMode) return res;
+  // FFF form: declared by the family, then checked by the secretary in Footclubs
+  const issues = [...res.issues];
+  const summary = [...res.summary];
+  let todo = 0;
+  if (!r.fffDeclaredAt) { summary.push(FFF_FORM_TODO); todo++; }
+  if (r.fffStatus === "MISSING") {
+    const msg = `Formulaire FFF incomplet : ${r.fffMissing.join(", ") || "voir le message du club"}`;
+    issues.push({ code: "FFF_MISSING", message: msg });
+    summary.unshift(msg);
+  }
+  const total = res.requiredSignatures.length + 1;
+  const done = total - res.missingSignatures.length - todo - (r.fffStatus === "MISSING" ? 1 : 0);
+  const state: typeof res.state = issues.length ? "TO_FIX" : res.state === "COMPLETE" && todo === 0 ? "COMPLETE" : "INCOMPLETE";
+  return { ...res, issues, summary, state, progress: Math.round((Math.max(0, done) / total) * 100) };
 }
 
 const stateToStatus = { COMPLETE: "SUBMITTED", INCOMPLETE: "INCOMPLETE", TO_FIX: "TO_FIX" } as const;
@@ -164,6 +184,7 @@ export async function decide(user: SessionUser, registrationId: string, decision
   if (decision === "VALIDATE") {
     const c = await computeCompleteness(r);
     if (c.state !== "COMPLETE") throw new AppError(`Dossier incomplet : ${c.summary.join(", ")}`);
+    if (r.club.footclubsMode && r.fffStatus !== "OK") throw new AppError("Vérifiez d'abord le formulaire FFF sur Footclubs (bouton « Complet sur Footclubs »)");
   } else if (!reason || reason.trim().length < 3) throw new AppError("Un motif est obligatoire");
   await prisma.registration.update({
     where: { id: r.id },

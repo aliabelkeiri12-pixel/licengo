@@ -6,8 +6,8 @@ import { LogoutButton } from "./user-menu";
 /** Back-office frame (club & admin): dark sidebar on desktop, scrollable tabs on mobile. */
 export function ConsoleFrame({ items, title, subtitle, accent, children }: { items: NavItem[]; title: string; subtitle?: string; accent?: string; children: React.ReactNode }) {
   return (
-    <div className="min-h-dvh md:grid md:grid-cols-[250px_1fr]">
-      <aside className="sticky top-0 z-30 bg-pitch-950 text-white md:h-dvh md:overflow-y-auto">
+    <div className="min-h-dvh md:grid md:grid-cols-[250px_1fr] print:block">
+      <aside className="sticky top-0 z-30 bg-pitch-950 text-white md:h-dvh md:overflow-y-auto print:hidden">
         <div className="flex items-center justify-between px-5 py-4">
           <Link href="/"><Logo light /></Link>
           <div className="md:hidden"><LogoutButton /></div>

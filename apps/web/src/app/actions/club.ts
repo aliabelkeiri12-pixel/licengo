@@ -236,7 +236,7 @@ export async function updateClubAction(_: ActionState, fd: FormData): Promise<Ac
       email: z.string().email().optional().or(z.literal("")), phone: z.string().max(20).optional(),
       primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/), reminderEveryDays: z.coerce.number().int().min(1).max(30),
     }).parse(Object.fromEntries(fd));
-    await prisma.club.update({ where: { id: clubId }, data: { ...d, email: d.email || null } });
+    await prisma.club.update({ where: { id: clubId }, data: { ...d, email: d.email || null, footclubsMode: fd.get("footclubsMode") === "on", payAfterCheck: fd.get("payAfterCheck") === "on", dailyDigest: fd.get("dailyDigest") === "on" } });
     await audit(user.id, "club.update", "Club", clubId);
     revalidatePath("/club", "layout");
     return { ok: "Paramètres enregistrés" };
@@ -293,5 +293,36 @@ export async function setExtrasAction(_: ActionState, fd: FormData): Promise<Act
     const total = await setRegistrationExtras(user, str(fd, "registrationId"), fd.getAll("extras").map(String));
     revalidatePath(`/club/dossiers/${str(fd, "registrationId")}`);
     return { ok: `Tarif mis à jour : ${(total / 100).toFixed(2).replace(".", ",")} €, la famille est prévenue` };
+  });
+}
+
+export async function checkFffAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const { user } = await clubWriter("SECRETARY");
+    const { checkFffForm } = await import("@/server/services/footclubs");
+    const ok = str(fd, "result") === "ok";
+    await checkFffForm(user, str(fd, "registrationId"), ok, fd.getAll("missing").map(String), str(fd, "note") || undefined);
+    revalidatePath("/club", "layout");
+    return { ok: ok ? "Formulaire FFF noté complet" : "Message envoyé au joueur (notification + email) avec la liste des documents manquants" };
+  });
+}
+
+export async function footclubsDoneAction(fd: FormData) {
+  const { user } = await clubWriter("SECRETARY");
+  const { markFootclubsDone } = await import("@/server/services/footclubs");
+  await markFootclubsDone(user, str(fd, "registrationId"), str(fd, "done") === "1");
+  revalidatePath("/club", "layout");
+  const back = str(fd, "back");
+  if (back.startsWith("/club")) redirect(back);
+}
+
+export async function offlinePaymentAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const { user } = await clubWriter("SECRETARY", "TREASURER");
+    const { recordOfflinePayment } = await import("@/server/services/footclubs");
+    const method = z.enum(["ESPECES", "CHEQUE", "AUTRE"]).parse(fd.get("method"));
+    await recordOfflinePayment(user, str(fd, "registrationId"), method, str(fd, "note") || undefined);
+    revalidatePath("/club", "layout");
+    return { ok: "Paiement enregistré : facture envoyée à la famille" };
   });
 }

@@ -8,7 +8,8 @@ import { Alert, Card, PageHeader, RegistrationBadge, PaymentBadge, Progress, Bad
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { InstallmentsTable } from "@/components/installments-table";
 import { DocThumb } from "@/components/doc-thumb";
-import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction } from "@/app/actions/club";
+import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction, checkFffAction, footclubsDoneAction, offlinePaymentAction } from "@/app/actions/club";
+import { FFF_ITEMS } from "@/server/services/footclubs";
 
 export const metadata = { title: "Dossier" };
 
@@ -115,7 +116,7 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
                 <input type="hidden" name="registrationId" value={r.id} />
                 <Field label="Motif / message à la famille" name="reason" hint="Obligatoire pour un refus ou une demande de modification"><Textarea name="reason" placeholder="Ex : la photo doit être de face, sur fond clair." /></Field>
                 <div className="grid gap-2">
-                  {r.status !== "VALIDATED" && <button name="decision" value="VALIDATE" disabled={c.state !== "COMPLETE"} className="h-11 rounded-xl bg-pitch-800 text-sm font-semibold text-white disabled:opacity-40">✓ Valider le dossier</button>}
+                  {r.status !== "VALIDATED" && <button name="decision" value="VALIDATE" disabled={c.state !== "COMPLETE" || (r.club.footclubsMode && r.fffStatus !== "OK")} className="h-11 rounded-xl bg-pitch-800 text-sm font-semibold text-white disabled:opacity-40">✓ Valider le dossier</button>}
                   <button name="decision" value="REQUEST_CHANGES" className="h-11 rounded-xl border-2 border-pitch-700 bg-white text-sm font-semibold text-pitch-800">↩ Demander une correction à la famille</button>
                   <p className="text-xs text-muted">La famille reçoit votre message et peut renvoyer ses documents depuis son espace.</p>
                 </div>
@@ -127,7 +128,7 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
                     <button name="decision" value="REJECT" className="mt-2 h-10 w-full rounded-xl bg-danger text-sm font-semibold text-white">Refuser l'inscription</button>
                   </details>
                 )}
-                {c.state !== "COMPLETE" && <p className="text-xs text-muted">La validation est possible dès que le dossier est complet.</p>}
+                {c.state !== "COMPLETE" ? <p className="text-xs text-muted">La validation est possible dès que le dossier est complet.</p> : r.club.footclubsMode && r.fffStatus !== "OK" ? <p className="text-xs text-muted">Vérifiez d'abord le formulaire FFF (cadre au-dessus).</p> : null}
               </ActionForm>
             </Card>
           )}
@@ -136,6 +137,50 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
               <h2 className="font-bold">Licence fédérale</h2>
               <p className="mt-1 text-xs text-muted">Numéro attribué par la fédération (Footclubs pour la FFF).</p>
               <ActionForm action={setLicenseNumberAction} className="mt-3 flex gap-2"><input type="hidden" name="registrationId" value={r.id} /><Input name="number" defaultValue={r.federationLicenseNumber ?? ""} placeholder="N° de licence" className="h-10" /><SubmitButton size="sm">OK</SubmitButton></ActionForm>
+            </Card>
+          )}
+          {r.club.footclubsMode && !closed && (
+            <Card className="border-2 border-pitch-700 p-5" data-testid="fff-card">
+              <h2 className="font-display text-lg font-bold">Formulaire FFF (Footclubs)</h2>
+              <p className="mt-1 text-sm">
+                {r.fffStatus === "OK" ? <span className="font-semibold text-pitch-700">✓ Vérifié complet sur Footclubs</span>
+                  : r.fffStatus === "MISSING" ? <span className="font-semibold text-danger">⚠ Incomplet, message envoyé : {r.fffMissing.join(", ")}</span>
+                  : r.fffDeclaredAt ? <span className="font-semibold text-blue-700">Le joueur indique l'avoir rempli : à vérifier sur Footclubs</span>
+                  : <span className="text-muted">Le joueur n'a pas encore indiqué avoir rempli son formulaire FFF.</span>}
+              </p>
+              {r.fffStatus !== "OK" && (
+                <ActionForm action={checkFffAction} className="mt-3 space-y-2">
+                  <input type="hidden" name="registrationId" value={r.id} />
+                  <button name="result" value="ok" className="h-11 w-full rounded-xl bg-pitch-800 text-sm font-semibold text-white">✓ Complet sur Footclubs</button>
+                  <details className="rounded-xl bg-chalk p-3">
+                    <summary className="cursor-pointer text-sm font-semibold">Il manque des documents…</summary>
+                    <div className="mt-2 space-y-1">
+                      {FFF_ITEMS.map((it) => <label key={it} className="flex items-center gap-2 text-sm"><input type="checkbox" name="missing" value={it} className="accent-pitch-700" /> {it}</label>)}
+                      <Textarea name="note" placeholder="Autre / précision (facultatif)" className="min-h-14" />
+                      <button name="result" value="missing" className="h-10 w-full rounded-xl border-2 border-danger text-sm font-semibold text-danger">Envoyer la liste au joueur</button>
+                    </div>
+                  </details>
+                </ActionForm>
+              )}
+            </Card>
+          )}
+          {r.status === "VALIDATED" && (
+            <Card className="p-5">
+              <h2 className="font-bold">Footclubs</h2>
+              {r.footclubsDoneAt ? <p className="mt-1 text-sm text-pitch-700">✓ Licence saisie dans Footclubs le {formatDate(r.footclubsDoneAt)}</p> : <p className="mt-1 text-sm text-muted">Une fois la licence validée dans Footclubs, cochez-la ici pour ne rien oublier.</p>}
+              <form action={footclubsDoneAction} className="mt-2"><input type="hidden" name="registrationId" value={r.id} /><input type="hidden" name="done" value={r.footclubsDoneAt ? "0" : "1"} /><button className={`h-10 w-full rounded-xl text-sm font-semibold ${r.footclubsDoneAt ? "border border-line" : "bg-pitch-800 text-white"}`}>{r.footclubsDoneAt ? "Annuler" : "✓ Saisie dans Footclubs faite"}</button></form>
+            </Card>
+          )}
+          {!payment && !closed && (
+            <Card className="p-5">
+              <h2 className="font-bold">Paiement reçu au club ?</h2>
+              <p className="mt-1 text-xs text-muted">Espèces ou chèque à une permanence : enregistrez-le ici, la famille reçoit sa facture.</p>
+              <ActionForm action={offlinePaymentAction} className="mt-2 space-y-2">
+                <input type="hidden" name="registrationId" value={r.id} />
+                <div className="flex gap-3 text-sm">{[["ESPECES", "Espèces"], ["CHEQUE", "Chèque"], ["AUTRE", "Autre"]].map(([v, l]) => <label key={v} className="flex items-center gap-1"><input type="radio" name="method" value={v} required className="accent-pitch-700" /> {l}</label>)}</div>
+                <Input name="note" placeholder="N° de chèque, remarque… (facultatif)" className="h-10" />
+                <SubmitButton size="sm" variant="outline">Enregistrer le paiement de {formatEUR(r.licenseFeeCents)}</SubmitButton>
+              </ActionForm>
             </Card>
           )}
           <Card className="p-5">

@@ -257,6 +257,12 @@ model Club {
   stripeAccountId       String?    @unique
   stripeChargesEnabled  Boolean    @default(false)
   reminderEveryDays     Int        @default(5)
+  /// Footclubs mode: the FFF collects the licence documents in its own form; LICENGO keeps payment + club papers
+  footclubsMode         Boolean    @default(false)
+  /// payment opens only once the secretary has checked the file
+  payAfterCheck         Boolean    @default(false)
+  /// daily summary e-mail to the club staff
+  dailyDigest           Boolean    @default(true)
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
 
@@ -328,6 +334,14 @@ model Registration {
   progress         Int                @default(0)
   federationLicenseNumber String?
   renewalOfId      String?
+  /// Footclubs mode: the family declares it completed the FFF form received by e-mail
+  fffDeclaredAt    DateTime?
+  /// Footclubs mode: secretary check of the FFF file: OK | MISSING
+  fffStatus        String?
+  fffMissing       String[]           @default([])
+  fffCheckedAt     DateTime?
+  /// the licence was entered / validated in Footclubs
+  footclubsDoneAt  DateTime?
   submittedAt      DateTime?
   validatedAt      DateTime?
   lastReminderAt   DateTime?
