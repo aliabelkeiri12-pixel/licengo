@@ -422,6 +422,11 @@ describe("dossier simplifié, validation par le club puis demande de paiement, r
     // the family only gives the player, the category and the documents
     const r0 = await reg.createRegistration(family as never, kid.id, u11Id, []);
     expect(r0.licenseFeeCents).toBe(15000);
+    // the secretary can move the player to any category of the season, and back
+    const u13 = await prisma.category.findFirstOrThrow({ where: { clubId, name: "U13" } });
+    expect((await reg.changeCategory(staff as never, r0.id, u13.id)).id).toBe(u13.id);
+    expect((await reg.getRegistration(r0.id)).licenseFeeCents).toBe(u13.priceCents);
+    await reg.changeCategory(staff as never, r0.id, u11Id);
     let c = await reg.computeCompleteness(await reg.getRegistration(r0.id));
     expect(c.requiredUploads).toEqual(["PHOTO", "MEDICAL_CERTIFICATE"]);
     await uploadDocument(family as never, { childId: kid.id, registrationId: r0.id, type: "PHOTO", file: file(PNG, "p.png", "image/png") });

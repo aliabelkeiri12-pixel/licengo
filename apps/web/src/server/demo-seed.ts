@@ -77,6 +77,7 @@ export async function seedDemo(prisma: PrismaClient) {
       { clubId: created.id, label: "Frais de mutation", amountCents: 3000, description: "Ajoutés par le club si le joueur était licencié dans un autre club la saison dernière.", mandatory: false },
       { clubId: created.id, label: `Habitant de ${c.city}`, amountCents: 1000, kind: "REDUCTION", proofLabel: "Justificatif de domicile de moins de 3 mois", proofDocType: "PROOF_OF_ADDRESS", description: "Appliquée par le club après vérification de l'adresse.", mandatory: false },
       { clubId: created.id, label: "ARS (allocation de rentrée scolaire)", amountCents: 3000, kind: "REDUCTION", proofLabel: "Attestation ARS de la CAF", proofDocType: "ARS_CERTIFICATE", description: "Appliquée par le club à réception de l'attestation (même en août : déduite des échéances restantes).", mandatory: false },
+      { clubId: created.id, label: "Quevilly Loisirs", amountCents: 0, kind: "REDUCTION", proofLabel: "Attestation Quevilly Loisirs", proofDocType: "OTHER", description: "Montant fixé par le club selon la commune.", mandatory: false },
       { clubId: created.id, label: "Pass'Sport", amountCents: 5000, kind: "REDUCTION", proofLabel: "Attestation / code Pass'Sport", proofDocType: "PASS_SPORT", description: "Appliquée par le club à réception du code Pass'Sport.", mandatory: false },
     ] });
     if (i === 0) await prisma.category.createMany({ data: defaultFootballCategories(start + 1).map((cat) => ({ ...cat, clubId: created.id, season: seasonLabel(start + 1), capacity: 40 })) });

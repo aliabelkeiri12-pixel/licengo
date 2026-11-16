@@ -86,7 +86,7 @@ export default async function RegistrationPage({ params, searchParams }: { param
                 };
   return (
     <>
-      <PageHeader eyebrow={`${r.club.name} · Saison ${r.season}`} title={`Inscription de ${r.child.firstName}`} subtitle={`${r.category.name} · ${formatEUR(r.licenseFeeCents + r.platformFeeCents)} frais de service inclus`} />
+      <PageHeader eyebrow={`${r.club.name} · Saison ${r.season}`} title={`Inscription de ${r.child.firstName}`} subtitle={r.club.payAfterCheck && !r.paymentRequestedAt ? `${r.category.name} · montant envoyé par le club après vérification` : `${r.category.name} · ${formatEUR(r.licenseFeeCents + r.platformFeeCents)} à payer`} />
       {paiement === "ok" && <div className="mb-4"><Alert tone="success">Paiement confirmé, merci ! Votre reçu et votre facture vous ont été envoyés par email.</Alert></div>}
       {paiement === "annule" && <div className="mb-4"><Alert tone="warning">Paiement annulé. Vous pouvez réessayer à tout moment.</Alert></div>}
       {r.decisionReason && r.status === "TO_FIX" && (
@@ -168,7 +168,7 @@ export default async function RegistrationPage({ params, searchParams }: { param
                     const doc = docs.find((d) => d.type === t);
                     return (
                       <li key={f.id} className="rounded-lg bg-chalk p-3 text-sm">
-                        <p className="flex justify-between font-semibold"><span>{f.label}</span><span className="text-pitch-700">-{formatEUR(f.amountCents)}</span></p>
+                        <p className="flex justify-between font-semibold"><span>{f.label}</span>{f.amountCents > 0 && <span className="text-pitch-700">-{formatEUR(f.amountCents)}</span>}</p>
                         <p className="text-xs text-muted">{f.proofLabel ?? DOCUMENT_LABELS[t]}</p>
                         {applied ? <p className="mt-1 font-semibold text-pitch-700">✓ Réduction appliquée par le club</p> : (
                           <>
@@ -229,10 +229,12 @@ export default async function RegistrationPage({ params, searchParams }: { param
             </Card>
           )}
           <Card className="p-5">
-            <h2 className="flex items-center gap-2 font-bold"><History className="h-4 w-4" /> Suivi du dossier</h2>
-            <ol className="mt-3 space-y-3 border-l-2 border-line pl-4 text-sm">
-              {r.events.map((e) => <li key={e.id}><p>{e.message}</p><p className="text-xs text-muted">{formatDateTime(e.createdAt)}</p></li>)}
-            </ol>
+            <details>
+              <summary className="flex cursor-pointer items-center gap-2 font-bold"><History className="h-4 w-4" /> Historique du dossier</summary>
+              <ol className="mt-3 space-y-3 border-l-2 border-line pl-4 text-sm">
+                {r.events.map((e) => <li key={e.id}><p>{e.message}</p><p className="text-xs text-muted">{formatDateTime(e.createdAt)}</p></li>)}
+              </ol>
+            </details>
           </Card>
           {editable && r.paymentStatus === "UNPAID" && (
             <form action={cancelRegistrationAction}><input type="hidden" name="registrationId" value={r.id} /><button className="text-sm font-semibold text-danger">Annuler cette inscription</button></form>

@@ -10,7 +10,7 @@ import type { StaffRole as SR } from "@prisma/client";
 import { AppError } from "@/server/errors";
 import { audit } from "@/server/audit";
 import { notifyFamily } from "@/server/notify";
-import { decide, assertClubAccess, currentSeason, setRegistrationExtras, addReductionAfterPayment } from "@/server/services/registrations";
+import { decide, assertClubAccess, currentSeason, setRegistrationExtras, addReductionAfterPayment, changeCategory } from "@/server/services/registrations";
 import { reviewDocument } from "@/server/services/documents";
 import { refundPayment } from "@/server/services/payments";
 import { updateOrderStatus, lowStockAlert } from "@/server/services/shop";
@@ -278,7 +278,7 @@ export async function addStaffAction(_: ActionState, fd: FormData): Promise<Acti
 export async function saveClubFeeAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return safe(async () => {
     const { user, clubId } = await clubWriter("SECRETARY", "TREASURER");
-    const d = z.object({ label: z.string().trim().min(2, "Libellé requis").max(60), amount: z.coerce.number().min(0.5).max(1000), description: z.string().trim().max(200).optional() }).parse(Object.fromEntries(fd));
+    const d = z.object({ label: z.string().trim().min(2, "Libellé requis").max(60), amount: z.coerce.number().min(0).max(1000), description: z.string().trim().max(200).optional() }).parse(Object.fromEntries(fd));
     const kind = str(fd, "kind") === "REDUCTION" ? "REDUCTION" : "SUPPLEMENT";
     await prisma.clubFee.create({ data: { clubId, label: d.label, amountCents: toCents(d.amount), description: d.description || null, kind, proofLabel: kind === "REDUCTION" ? str(fd, "proofLabel") || null : null,
       proofDocType: kind === "REDUCTION" && ["PROOF_OF_ADDRESS", "ARS_CERTIFICATE", "PASS_SPORT", "OTHER"].includes(str(fd, "proofDocType")) ? str(fd, "proofDocType") : null, mandatory: kind === "SUPPLEMENT" && str(fd, "mandatory") === "yes" } });
@@ -348,8 +348,18 @@ export async function confirmReductionAction(_: ActionState, fd: FormData): Prom
 export async function addReductionAfterPaymentAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return safe(async () => {
     const { user } = await clubWriter("SECRETARY", "TREASURER");
-    await addReductionAfterPayment(user, str(fd, "registrationId"), str(fd, "feeId"));
+    const a = str(fd, "amount").replace(",", ".");
+    await addReductionAfterPayment(user, str(fd, "registrationId"), str(fd, "feeId"), a ? Math.round(Number(a) * 100) : undefined);
     revalidatePath(`/club/dossiers/${str(fd, "registrationId")}`);
     return { ok: "Réduction appliquée : déduite des prochaines échéances, la famille est prévenue" };
+  });
+}
+
+export async function changeCategoryAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return safe(async () => {
+    const { user } = await clubWriter("SECRETARY", "TREASURER");
+    const cat = await changeCategory(user, str(fd, "registrationId"), str(fd, "categoryId"));
+    revalidatePath(`/club/dossiers/${str(fd, "registrationId")}`);
+    return { ok: `Catégorie changée : ${cat.name}` };
   });
 }

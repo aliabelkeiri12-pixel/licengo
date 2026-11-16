@@ -21,7 +21,9 @@ export function RegisterForm({ members: children, categories, feeCents, defaultC
   const known = children.find((c) => c.id === childId);
   const year = isNew ? (birth ? Number(birth.slice(0, 4)) : null) : known!.year;
   const g = isNew ? gender : known!.gender;
-  const eligible = useMemo(() => (year ? categories.filter((c) => year >= c.min && year <= c.max && (c.gender === "MIXED" || !g || c.gender === g)) : categories), [categories, year, g]);
+  // every open category can be chosen; the one matching the age is suggested first
+  const fits = (c: Cat) => !!year && year >= c.min && year <= c.max && (c.gender === "MIXED" || !g || c.gender === g);
+  const eligible = useMemo(() => [...categories.filter(fits), ...categories.filter((c) => !fits(c))], [categories, year, g]); // eslint-disable-line react-hooks/exhaustive-deps
   const [catId, setCatId] = useState<string>("");
   const selected = eligible.find((c) => c.id === catId) ?? eligible[0];
   const extra = mandatory.reduce((t, e) => t + (e.kind === "REDUCTION" ? -e.amountCents : e.amountCents), 0);
@@ -49,10 +51,10 @@ export function RegisterForm({ members: children, categories, feeCents, defaultC
           </div>
         </div>
       )}
-      {eligible.length === 0 ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Aucune catégorie ouverte pour une naissance en {year}.</p> : (
+      {eligible.length === 0 ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Aucune catégorie ouverte pour le moment.</p> : (
         <>
           <Field label="Catégorie souhaitée" name="categoryId" hint={year ? "Proposée automatiquement selon l'année de naissance" : "Indiquez la date de naissance : la bonne catégorie sera proposée"}>
-            <Select name="categoryId" value={selected?.id} onChange={(e) => setCatId(e.target.value)}>{eligible.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select>
+            <Select name="categoryId" value={selected?.id} onChange={(e) => setCatId(e.target.value)}>{eligible.map((c) => <option key={c.id} value={c.id}>{c.name}{fits(c) ? " (conseillée)" : ""}</option>)}</Select>
           </Field>
           {selected && (
             <div className="rounded-xl bg-chalk p-3 text-sm">

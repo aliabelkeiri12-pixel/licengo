@@ -133,7 +133,8 @@ async function selectExtras(clubId: string, optionalIds: string[], previous: Ext
     return {
       id: f.id, label: f.label, kind: reduction ? "REDUCTION" : "SUPPLEMENT",
       // the secretary may adjust a supplement (transfer fee differs by category)
-      amountCents: reduction ? -f.amountCents : byClub && amounts[f.id] !== undefined ? amounts[f.id] : f.amountCents,
+      // amounts are free: the secretary adjusts transfer fee and reductions (town, ARS, Pass'Sport…) per file
+      amountCents: (reduction ? -1 : 1) * (byClub && amounts[f.id] !== undefined ? amounts[f.id] : f.amountCents),
       ...(before?.proof ? { proof: before.proof } : {}),
       // chosen by the club after checking the proof → applied at once
       ...(reduction && f.proofLabel && !byClub ? { pending: before ? !!before.pending : true } : {}),
@@ -311,15 +312,30 @@ export async function confirmReduction(user: SessionUser, registrationId: string
 }
 
 /** The club grants a reduction after the payment started (e.g. ARS certificate received in August). */
-export async function addReductionAfterPayment(user: SessionUser, registrationId: string, feeId: string) {
+export async function addReductionAfterPayment(user: SessionUser, registrationId: string, feeId: string, amountCents?: number) {
   const r = await assertClubAccess(user, registrationId);
   const fee = await prisma.clubFee.findFirst({ where: { id: feeId, clubId: r.clubId, kind: "REDUCTION", active: true } });
   if (!fee) throw new AppError("Réduction introuvable");
   const extras = extrasOf(r.extras);
   if (extras.some((e) => e.id === fee.id)) throw new AppError("Cette réduction est déjà appliquée");
-  extras.push({ id: fee.id, label: fee.label, kind: "REDUCTION", amountCents: -fee.amountCents, pending: true } as Extra);
+  const amount = amountCents ?? fee.amountCents;
+  if (!Number.isInteger(amount) || amount <= 0 || amount > 100000) throw new AppError("Indiquez le montant de la réduction");
+  extras.push({ id: fee.id, label: fee.label, kind: "REDUCTION", amountCents: -amount, pending: true } as Extra);
   await prisma.registration.update({ where: { id: r.id }, data: { extras } });
   await confirmReduction(user, registrationId, fee.id);
+}
+
+/** The secretary moves the player to another category of the same season (before any payment). */
+export async function changeCategory(user: SessionUser, registrationId: string, categoryId: string) {
+  const r = await assertClubAccess(user, registrationId);
+  if (r.payments.some((p) => !["CANCELLED", "PENDING"].includes(p.status))) throw new AppError("Un paiement a déjà commencé : la catégorie ne peut plus être changée");
+  const cat = await prisma.category.findFirst({ where: { id: categoryId, clubId: r.clubId, season: r.season } });
+  if (!cat) throw new AppError("Catégorie introuvable");
+  const total = priceWithExtras(cat.priceCents, extrasOf(r.extras));
+  await prisma.registration.update({ where: { id: r.id }, data: { categoryId: cat.id, licenseFeeCents: total } });
+  await event(r.id, user.id, "CATEGORY", `Catégorie changée par le club : ${r.category.name} → ${cat.name}`);
+  await notifyFamily(r.child.familyId, { type: "CATEGORY_CHANGED", title: `${r.club.name} : catégorie modifiée`, body: `${r.child.firstName} : ${cat.name}`, link: `/famille/inscriptions/${r.id}` });
+  return cat;
 }
 
 /** Reopens a file refused by mistake: the family can correct it again. */

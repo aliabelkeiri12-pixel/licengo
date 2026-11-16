@@ -10,7 +10,7 @@ import { Alert, Card, PageHeader, RegistrationBadge, PaymentBadge, Progress, Bad
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { InstallmentsTable } from "@/components/installments-table";
 import { DocThumb } from "@/components/doc-thumb";
-import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction, checkFffAction, footclubsDoneAction, offlinePaymentAction, confirmReductionAction, addReductionAfterPaymentAction } from "@/app/actions/club";
+import { decisionAction, reviewDocumentAction, setLicenseNumberAction, refundAction, setExtrasAction, checkFffAction, footclubsDoneAction, offlinePaymentAction, confirmReductionAction, addReductionAfterPaymentAction, changeCategoryAction } from "@/app/actions/club";
 import { FFF_ITEMS } from "@/server/services/footclubs";
 
 export const metadata = { title: "Dossier" };
@@ -28,6 +28,7 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
   const expectedCat = footballCategoryFor(r.child.birthDate, Number(r.season.slice(0, 4)));
   const closed = ["REJECTED", "CANCELLED"].includes(r.status);
   const fees = await prisma.clubFee.findMany({ where: { clubId, active: true }, orderBy: { createdAt: "asc" } });
+  const seasonCats = await prisma.category.findMany({ where: { clubId, season: r.season }, orderBy: { birthYearMax: "desc" } });
   const chosen = new Set(extrasOf(r.extras).map((e) => e.id));
   const canEditExtras = !closed && !payment && fees.length > 0;
   const sendsPayment = r.status !== "VALIDATED" && r.club.payAfterCheck && r.paymentStatus === "UNPAID" && !payment;
@@ -190,6 +191,13 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
           )}
           <Card className="p-5">
             <h2 className="font-display text-lg font-bold">Tarif</h2>
+            {!closed && !payment && (
+              <ActionForm action={changeCategoryAction} className="mt-2 flex gap-2">
+                <input type="hidden" name="registrationId" value={r.id} />
+                <Select name="categoryId" defaultValue={r.categoryId} aria-label="Catégorie" className="h-10">{seasonCats.map((k) => <option key={k.id} value={k.id}>{k.name} · {formatEUR(k.priceCents)}</option>)}</Select>
+                <SubmitButton size="sm" variant="outline">Changer</SubmitButton>
+              </ActionForm>
+            )}
             <dl className="mt-2 space-y-1 text-sm">
               <div className="flex justify-between"><dt className="text-muted">Licence {r.category.name}</dt><dd>{formatEUR(r.category.priceCents)}</dd></div>
               {extrasOf(r.extras).map((e) => (
@@ -209,7 +217,8 @@ export default async function ClubFile({ params, searchParams }: { params: Promi
               <ActionForm action={addReductionAfterPaymentAction} className="mt-3 space-y-2 rounded-xl bg-chalk p-3" data-testid="late-reduction">
                 <p className="text-sm font-semibold">Justificatif reçu plus tard (ARS, Pass'Sport…) ?</p>
                 <input type="hidden" name="registrationId" value={r.id} />
-                <Select name="feeId" className="h-10">{fees.filter((f) => f.kind === "REDUCTION" && !chosen.has(f.id)).map((f) => <option key={f.id} value={f.id}>{f.label} (-{formatEUR(f.amountCents)})</option>)}</Select>
+                <Select name="feeId" className="h-10">{fees.filter((f) => f.kind === "REDUCTION" && !chosen.has(f.id)).map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}</Select>
+                <Input name="amount" inputMode="decimal" placeholder="Montant de la réduction (€)" required className="h-10" />
                 <SubmitButton size="sm" variant="outline">Appliquer la réduction</SubmitButton>
                 <p className="text-xs text-muted">Déduite des dernières échéances ; si tout est déjà payé, remboursée sur la carte.</p>
               </ActionForm>
